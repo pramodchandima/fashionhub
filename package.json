@@ -2,10 +2,10 @@
   "name": "fashionhub",
   "version": "1.0.0",
   "description": "Clothing Store - React + Node.js",
-  "main": "backend/server.js",
+  "main": "server.js",
   "scripts": {
-    "start": "node backend/server.js",
-    "build": "cd frontend && npm install && npm run build",
+    "start": "node server.js",
+    "build": "echo 'Frontend already built - skipping build phase'",
     "install-all": "npm install && cd frontend && npm install"
   },
   "dependencies": {

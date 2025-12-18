@@ -88,7 +88,7 @@ const dbConfig = {
   host: process.env.MYSQLHOST || 'localhost',
   user: process.env.MYSQLUSER || 'root',
   password: process.env.MYSQLPASSWORD || '',
-  database: process.env.MYSQLDATABASE || 'railway',
+  database: process.env.MYSQLDATABASE || 'clothing_store',
   port: process.env.MYSQLPORT || 3306
 };
 
@@ -509,10 +509,6 @@ The FashionHub Team
 }
 
 // ============= PUBLIC API ROUTES =============
-
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, '../frontend/build', 'index.html'));
-});
 
 app.get('/api/health', (req, res) => {
     const emailConfigured = EMAIL_USER && EMAIL_PASS && EMAIL_USER !== 'your-email@gmail.com';
@@ -1231,35 +1227,46 @@ app.put('/api/admin/contact-messages/:id/status', authenticateToken, async (req,
 });
 
 // ============= SERVE REACT FRONTEND =============
-// IMPORTANT: This must be AFTER all API routes but BEFORE 404 handler
+// Serve static files from frontend-build folder
+app.use(express.static(path.join(__dirname, 'frontend-build')));
 
-// Serve static files from React app
-app.use(express.static('frontend-build'));
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'frontend-build', 'index.html'));
+// For React Router - handle all non-API requests
+app.get('*', (req, res, next) => {
+  // Don't interfere with API routes or static files
+  if (req.url.startsWith('/api/') || req.url.startsWith('/uploads/')) {
+    return next(); // Pass to 404 handler if API route doesn't exist
+  }
+  
+  // Serve the React app
+  res.sendFile(path.join(__dirname, 'frontend-build', 'index.html'), (err) => {
+    if (err) {
+      console.error('Error sending index.html:', err);
+      res.status(500).send('Server error loading frontend');
+    }
+  });
 });
 
-// For any non-API request, send back React's index.html
-app.get('*', (req, res) => {
-  // Don't interfere with API routes
+// 404 Handler for API routes
+app.use((req, res, next) => {
   if (req.url.startsWith('/api/')) {
     return res.status(404).json({ 
         success: false,
         error: `API route ${req.url} not found` 
     });
   }
-  res.sendFile(path.join(__dirname, '../frontend/build', 'index.html'));
+  next();
 });
 
-// 404 Handler
+// General 404 handler
 app.use((req, res) => {
-    res.status(404).json({ 
-        success: false,
-        error: `Route ${req.url} not found` 
-    });
+  res.status(404).sendFile(path.join(__dirname, 'frontend-build', 'index.html'), (err) => {
+    if (err) {
+      res.status(404).send('Page not found');
+    }
+  });
 });
 
-// Error handling
+// Error handling middleware
 app.use((err, req, res, next) => {
     console.error('Unhandled error:', err);
     res.status(500).json({ 
@@ -1268,38 +1275,20 @@ app.use((err, req, res, next) => {
     });
 });
 
-// Start server
-//initializeDatabase().then(() => {
-  //app.listen(PORT, '0.0.0.0', () => {
-    //console.log('\n' + '='.repeat(50));
-    //console.log('🚀 FashionHub Backend Started Successfully!');
-    //console.log('='.repeat(50));
-    //console.log(`📍 Local Access: http://localhost:${PORT}`);
-    //console.log(`🌐 Network Access: http://${LOCAL_IP}:${PORT}`);
-    //console.log('📊 API Health: /api/health');
-    //console.log('📧 Contact Form: /api/contact');
-    //console.log('🛍️ Products: /api/products');
-    //console.log('🏪 Categories: /api/categories');
-    //console.log('🔐 Admin Login: /api/admin/login');
-    //////////////////////console.log('='.repeat(50));
-    ////////////////////console.log('\n📱 To access from other devices:');
-    //////////////////console.log(`   1. Make sure device is on same WiFi`);
-    ////////////////console.log(`   2. Open browser on other device`);
-    //////////////console.log(`   3. Go to: http://${LOCAL_IP}:3000 (Frontend)`);
-    ////////////console.log(`   4. Or: http://${LOCAL_IP}:${PORT} (Backend API)`);
-    c//////////onsole.log('='.repeat(50) + '\n');
-  ////////});
-//////}).catch(err => {
-  ////console.error('❌ Failed to start server:', err);
-//});
+// ============= START SERVER =============
+async function startServer() {
+    try {
+      await initializeDatabase();
+      console.log('✅ Database initialized successfully');
+      
+      app.listen(PORT, '0.0.0.0', () => {
+        console.log(`🚀 Server running on port ${PORT}`);
+      });
+    } catch (error) {
+      console.error('❌ Failed to start server:', error);
+      process.exit(1);
+    }
+  }
 
-// === REPLACE WITH THIS ===
-// Initialize database and export app for Passenger
-initializeDatabase().then(() => {
-  console.log('✅ Database initialized successfully');
-}).catch(err => {
-  console.error('❌ Database initialization failed:', err);
-});
-
-// Export the app for Passenger
-module.exports = app;
+// Start the server
+startServer();
