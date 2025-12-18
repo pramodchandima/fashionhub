@@ -112,8 +112,10 @@ async function initializeDatabase() {
     await createTables();
     
   } catch (error) {
-    console.error('❌ Database connection failed:', error.message);
-    process.exit(1);
+    console.error('⚠️ Database connection failed:', error.message);
+    console.log('⚠️ Starting server WITHOUT database (frontend will still work)...');
+    pool = null;  // Don't crash, just set pool to null
+    // REMOVED: process.exit(1);
   }
 }
 
