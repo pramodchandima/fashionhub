@@ -84,8 +84,13 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads'), {
 }));
 
 // === DATABASE CONFIGURATION ===
-const dbConfig = {
-  host: process.env.MYSQLHOST || 'localhost',
+const connectionString = process.env.DATABASE_URL;
+
+const dbConfig = connectionString ? {
+  uri: connectionString,
+  ssl: { rejectUnauthorized: false }  // Required for Railway
+} : {
+  host: process.env.DB_HOST || 'localhost',
   user: process.env.MYSQLUSER || 'root',
   password: process.env.MYSQLPASSWORD || '',
   database: process.env.MYSQLDATABASE || 'clothing_store',
