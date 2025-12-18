@@ -40,8 +40,7 @@ const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@example.com';
 
 console.log('🔧 Environment Check:');
 console.log('   PORT:', PORT);
-console.log('   DB_HOST:', process.env.DB_HOST || 'localhost');
-console.log('   DB_NAME:', process.env.DB_NAME || 'clothing_store');
+console.log('   Database:', process.env.DATABASE_URL ? '✅ Connected via DATABASE_URL' : '❌ Not connected');
 console.log('   LOCAL IP:', LOCAL_IP);
 console.log('   EMAIL_HOST:', EMAIL_HOST);
 console.log('   EMAIL_USER:', EMAIL_USER ? '✓ Set' : '✗ Not set');
@@ -110,12 +109,13 @@ async function initializeDatabase() {
     
     // Create tables if they don't exist
     await createTables();
+    return true; // Success
     
   } catch (error) {
     console.error('⚠️ Database connection failed:', error.message);
     console.log('⚠️ Starting server WITHOUT database (frontend will still work)...');
     pool = null;  // Don't crash, just set pool to null
-    // REMOVED: process.exit(1);
+    return false; // Failure
   }
 }
 
@@ -338,6 +338,14 @@ app.post('/api/contact', async (req, res) => {
         const sanitizedEmail = sanitizeInput(email, 100);
         const sanitizedSubject = subject ? sanitizeInput(subject, 200) : 'Contact Form Submission';
         const sanitizedMessage = sanitizeInput(message, 5000);
+        
+        // Check if database is available
+        if (!pool) {
+          return res.status(503).json({ 
+            success: false,
+            error: 'Contact form is temporarily unavailable. Please try again later.' 
+          });
+        }
         
         // Save to database
         const [dbResult] = await pool.query(
@@ -568,6 +576,14 @@ app.get('/api/test-image', (req, res) => {
 // --- SETUP ADMIN ROUTE ---
 app.get('/api/setup-admin', async (req, res) => {
     try {
+        // Check if database is available
+        if (!pool) {
+            return res.status(503).json({ 
+                success: false,
+                error: 'Database is not available. Cannot setup admin.' 
+            });
+        }
+        
         const username = process.env.ADMIN_USERNAME || 'admin';
         const password = process.env.ADMIN_PASSWORD || 'Admin@123';
         const email = process.env.ADMIN_EMAIL || 'admin@example.com';
@@ -601,6 +617,11 @@ app.get('/api/setup-admin', async (req, res) => {
 // Get all categories
 app.get('/api/categories', async (req, res) => {
   try {
+    // Check if database is available
+    if (!pool) {
+      return res.json([]); // Return empty array if no database
+    }
+    
     const [rows] = await pool.query(
       'SELECT * FROM categories WHERE is_active = 1 ORDER BY category_name'
     );
@@ -622,6 +643,11 @@ app.get('/api/categories', async (req, res) => {
 // Get all products
 app.get('/api/products', async (req, res) => {
   try {
+    // Check if database is available
+    if (!pool) {
+      return res.json([]); // Return empty array if no database
+    }
+    
     const { category, search } = req.query;
     let query = `
       SELECT p.*, c.category_name as category
@@ -667,6 +693,13 @@ app.get('/api/products', async (req, res) => {
 // Get single product
 app.get('/api/products/:id', async (req, res) => {
   try {
+    // Check if database is available
+    if (!pool) {
+      return res.status(503).json({ 
+        error: 'Product information is temporarily unavailable.' 
+      });
+    }
+    
     const productId = parseInt(req.params.id);
     
     const [products] = await pool.query(`
@@ -701,6 +734,14 @@ app.get('/api/products/:id', async (req, res) => {
 
 // Place Order
 app.post('/api/orders', async (req, res) => {
+    // Check if database is available
+    if (!pool) {
+      return res.status(503).json({ 
+        success: false,
+        error: 'Order system is temporarily unavailable. Please try again later.' 
+      });
+    }
+    
     const connection = await pool.getConnection();
     try {
         await connection.beginTransaction();
@@ -764,6 +805,14 @@ app.post('/api/orders', async (req, res) => {
 // Admin Login
 app.post('/api/admin/login', async (req, res) => {
   try {
+    // Check if database is available
+    if (!pool) {
+      return res.status(503).json({ 
+        success: false,
+        error: 'Admin system is temporarily unavailable.' 
+      });
+    }
+    
     const { username, password } = req.body;
     
     if (!username || !password) {
@@ -825,6 +874,14 @@ app.post('/api/admin/login', async (req, res) => {
 // Change Password
 app.post('/api/admin/change-password', authenticateToken, async (req, res) => {
     try {
+        // Check if database is available
+        if (!pool) {
+          return res.status(503).json({ 
+            success: false,
+            error: 'Database is temporarily unavailable.' 
+          });
+        }
+        
         const { currentPassword, newPassword } = req.body;
         const adminId = req.user.id;
 
@@ -874,6 +931,11 @@ app.post('/api/admin/change-password', authenticateToken, async (req, res) => {
 // --- ADMIN CATEGORIES ROUTES ---
 app.get('/api/admin/categories', authenticateToken, async (req, res) => {
     try {
+        // Check if database is available
+        if (!pool) {
+          return res.json([]);
+        }
+        
         const [rows] = await pool.query('SELECT * FROM categories WHERE is_active = 1');
         
         // Convert image paths to full URLs for admin panel too
@@ -894,6 +956,13 @@ app.post('/api/admin/categories', authenticateToken, upload.fields([
     { name: 'hoverImage', maxCount: 1 }
 ]), async (req, res) => {
     try {
+        // Check if database is available
+        if (!pool) {
+          return res.status(503).json({ 
+            error: 'Database is temporarily unavailable.' 
+          });
+        }
+        
         const { name, description } = req.body;
         
         if (!name) {
@@ -925,6 +994,13 @@ app.put('/api/admin/categories/:id', authenticateToken, upload.fields([
     { name: 'hoverImage', maxCount: 1 }
 ]), async (req, res) => {
     try {
+        // Check if database is available
+        if (!pool) {
+          return res.status(503).json({ 
+            error: 'Database is temporarily unavailable.' 
+          });
+        }
+        
         const { name, description } = req.body;
         let query = 'UPDATE categories SET category_name = ?, description = ?';
         const params = [name, description];
@@ -951,6 +1027,13 @@ app.put('/api/admin/categories/:id', authenticateToken, upload.fields([
 
 app.delete('/api/admin/categories/:id', authenticateToken, async (req, res) => {
     try {
+        // Check if database is available
+        if (!pool) {
+          return res.status(503).json({ 
+            error: 'Database is temporarily unavailable.' 
+          });
+        }
+        
         await pool.query('UPDATE categories SET is_active = 0 WHERE category_id = ?', [req.params.id]);
         res.json({ success: true, message: 'Category deleted successfully' });
     } catch (error) {
@@ -961,6 +1044,11 @@ app.delete('/api/admin/categories/:id', authenticateToken, async (req, res) => {
 // --- ADMIN PRODUCTS ROUTES ---
 app.get('/api/admin/products', authenticateToken, async (req, res) => {
     try {
+        // Check if database is available
+        if (!pool) {
+          return res.json([]);
+        }
+        
         const [products] = await pool.query(`
             SELECT p.*, c.category_name 
             FROM products p 
@@ -986,6 +1074,14 @@ app.get('/api/admin/products', authenticateToken, async (req, res) => {
 
 // === FIXED: PRODUCT CREATION ===
 app.post('/api/admin/products', authenticateToken, (req, res, next) => {
+    // Check if database is available
+    if (!pool) {
+      return res.status(503).json({ 
+        success: false,
+        error: 'Database is temporarily unavailable.' 
+      });
+    }
+    
     // Create a multer instance that handles both fields and file
     const multerUpload = multer({
         storage: storage,
@@ -1115,6 +1211,14 @@ app.post('/api/admin/products', authenticateToken, (req, res, next) => {
 });
 
 app.put('/api/admin/products/:id', authenticateToken, upload.single('image'), async (req, res) => {
+    // Check if database is available
+    if (!pool) {
+      return res.status(503).json({ 
+        success: false,
+        error: 'Database is temporarily unavailable.' 
+      });
+    }
+    
     const connection = await pool.getConnection();
     try {
         await connection.beginTransaction();
@@ -1180,6 +1284,13 @@ app.put('/api/admin/products/:id', authenticateToken, upload.single('image'), as
 
 app.delete('/api/admin/products/:id', authenticateToken, async (req, res) => {
     try {
+        // Check if database is available
+        if (!pool) {
+          return res.status(503).json({ 
+            error: 'Database is temporarily unavailable.' 
+          });
+        }
+        
         await pool.query('UPDATE products SET is_active = 0 WHERE product_id = ?', [req.params.id]);
         res.json({ 
             success: true, 
@@ -1193,6 +1304,11 @@ app.delete('/api/admin/products/:id', authenticateToken, async (req, res) => {
 // --- ADMIN CONTACT MESSAGES ROUTES ---
 app.get('/api/admin/contact-messages', authenticateToken, async (req, res) => {
     try {
+        // Check if database is available
+        if (!pool) {
+          return res.json([]);
+        }
+        
         const [messages] = await pool.query(`
             SELECT * FROM contact_messages 
             ORDER BY created_at DESC
@@ -1206,6 +1322,13 @@ app.get('/api/admin/contact-messages', authenticateToken, async (req, res) => {
 
 app.put('/api/admin/contact-messages/:id/status', authenticateToken, async (req, res) => {
     try {
+        // Check if database is available
+        if (!pool) {
+          return res.status(503).json({ 
+            error: 'Database is temporarily unavailable.' 
+          });
+        }
+        
         const { status } = req.body;
         const messageId = req.params.id;
         
@@ -1285,8 +1408,13 @@ app.use((err, req, res, next) => {
 // ============= START SERVER =============
 async function startServer() {
     try {
-      await initializeDatabase();
-      console.log('✅ Database initialized successfully');
+      const dbSuccess = await initializeDatabase();
+      
+      if (dbSuccess) {
+        console.log('✅ Database initialized successfully');
+      } else {
+        console.log('⚠️ Server starting WITHOUT database');
+      }
       
       app.listen(PORT, '0.0.0.0', () => {
         console.log(`🚀 Server running on port ${PORT}`);
