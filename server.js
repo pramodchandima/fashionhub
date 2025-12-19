@@ -89,7 +89,7 @@ const dbConfig = connectionString ? {
   uri: connectionString,
   ssl: { rejectUnauthorized: false }  // Required for Railway
 } : {
-  host: process.env.DB_HOST || 'localhost',
+  host: process.env.MYSQLHOST  || 'localhost',
   user: process.env.MYSQLUSER || 'root',
   password: process.env.MYSQL_ROOT_PASSWORD  || '',
   database: process.env.MYSQLDATABASE || 'clothing_store',
