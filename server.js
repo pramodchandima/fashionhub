@@ -91,15 +91,24 @@ const dbConfig = connectionString ? {
 } : {
   host: process.env.DB_HOST || 'localhost',
   user: process.env.MYSQLUSER || 'root',
-  password: process.env.MYSQLPASSWORD || '',
+  password: process.env.MYSQL_ROOT_PASSWORD  || '',
   database: process.env.MYSQLDATABASE || 'clothing_store',
-  port: process.env.MYSQLPORT || 3306
+  port: process.env.MYSQLPORT || 3306,
+  ssl: { rejectUnauthorized: false }  // ✅ ADD THIS FOR RAILWAY MYSQL
+  
 };
 
 let pool;
 
 async function initializeDatabase() {
   try {
+    console.log('🔍 DEBUG: Checking database configuration...');
+    console.log('🔍 DEBUG: connectionString:', process.env.DATABASE_URL || 'Not set');
+    console.log('🔍 DEBUG: MYSQLHOST:', process.env.MYSQLHOST || 'Not set');
+    console.log('🔍 DEBUG: MYSQLUSER:', process.env.MYSQLUSER || 'Not set');
+    console.log('🔍 DEBUG: MYSQLDATABASE:', process.env.MYSQLDATABASE || 'Not set');
+    console.log('🔍 DEBUG: MYSQLPORT:', process.env.MYSQLPORT || 'Not set');
+
     pool = mysql.createPool(dbConfig);
     
     // Test connection
