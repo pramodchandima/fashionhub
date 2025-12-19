@@ -85,12 +85,16 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads'), {
 // === DATABASE CONFIGURATION ===
 const connectionString = process.env.DATABASE_URL;
 
-const dbConfig = {
-  host: 'mysql.railway.internal',
-  user: 'root',               // Hardcoded
-  password: 'kFjJtGwBhRZtRlEefadNRyUnjtFPSAxR',  // YOUR PASSWORD
-  database: 'railway',        // Hardcoded
-  port: 3306,                 // Hardcoded
+const dbConfig = connectionString ? {
+  uri: connectionString,
+  ssl: { rejectUnauthorized: false }
+} : {
+  host: process.env.MYSQLHOST || 'services.internal',
+  user: process.env.MYSQLUSER || 'root',
+  password: process.env.MYSQL_ROOT_PASSWORD || '',
+  database: process.env.MYSQLDATABASE || 'clothing_store',
+  port: process.env.MYSQLPORT || 3306,
+  // ✅ CORRECT SSL CONFIG FOR MYSQL2:
   ssl: {
     rejectUnauthorized: false // Temporarily allow the connection
   }
