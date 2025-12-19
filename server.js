@@ -59,16 +59,10 @@ app.use((req, res, next) => {
 
 // === CORS CONFIGURATION ===
 app.use(cors({
-    origin: [
-        'http://localhost:3000', 
-        'http://localhost:5173', 
-        'http://localhost:5000',
-        `http://${LOCAL_IP}:3000`,
-        `http://${LOCAL_IP}:5000`
-    ],
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'Accept']
+  origin: true,  // ✅ ALLOWS ALL ORIGINS (HTTP, HTTPS, everything)
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Accept']
 }));
 
 // Handle preflight requests
