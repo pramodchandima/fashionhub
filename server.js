@@ -86,7 +86,7 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads'), {
 const connectionString = process.env.DATABASE_URL;
 
 const dbConfig = {
-  host: 'services.internal',  // Hardcoded
+  host: 'mysql.railway.internal',
   user: 'root',               // Hardcoded
   password: 'kFjJtGwBhRZtRlEefadNRyUnjtFPSAxR',  // YOUR PASSWORD
   database: 'railway',        // Hardcoded
