@@ -89,10 +89,10 @@ const dbConfig = connectionString ? {
   uri: connectionString,
   ssl: { rejectUnauthorized: false }
 } : {
-  host: process.env.MYSQLHOST || 'services.internal',
+  host: process.env.MYSQLHOST || 'mysql.railway.internal',
   user: process.env.MYSQLUSER || 'root',
-  password: process.env.MYSQL_ROOT_PASSWORD || '',
-  database: process.env.MYSQLDATABASE || 'clothing_store',
+  password: process.env.MYSQL_ROOT_PASSWORD || 'kFjJtGwBhRZtRlEefadNRyUnjtFPSAxR',
+  database: process.env.MYSQLDATABASE || 'railway',
   port: process.env.MYSQLPORT || 3306,
   // ✅ CORRECT SSL CONFIG FOR MYSQL2:
   ssl: {
@@ -104,7 +104,10 @@ let pool;
 
 async function initializeDatabase() {
   try {
-    console.log('🔍 DEBUG: Checking database configuration...');
+    console.log('🔍 DEBUG: ALL environment variables:');
+      for (const key in process.env) {
+        console.log(`  ${key}: ${process.env[key]}`);
+      }
     console.log('🔍 DEBUG: connectionString:', process.env.DATABASE_URL || 'Not set');
     console.log('🔍 DEBUG: MYSQLHOST:', process.env.MYSQLHOST || 'Not set');
     console.log('🔍 DEBUG: MYSQLUSER:', process.env.MYSQLUSER || 'Not set');
