@@ -87,15 +87,18 @@ const connectionString = process.env.DATABASE_URL;
 
 const dbConfig = connectionString ? {
   uri: connectionString,
-  ssl: { rejectUnauthorized: false }  // Required for Railway
+  ssl: { rejectUnauthorized: false }
 } : {
-  host: process.env.MYSQLHOST  || 'localhost',
+  host: process.env.MYSQLHOST || 'services.internal',
   user: process.env.MYSQLUSER || 'root',
-  password: process.env.MYSQL_ROOT_PASSWORD  || '',
+  password: process.env.MYSQL_ROOT_PASSWORD || '',
   database: process.env.MYSQLDATABASE || 'clothing_store',
   port: process.env.MYSQLPORT || 3306,
-  ssl: { rejectUnauthorized: false }  // ✅ ADD THIS FOR RAILWAY MYSQL
-  
+  // ✅ CORRECT SSL CONFIG FOR MYSQL2:
+  ssl: {
+    rejectUnauthorized: true,
+    minVersion: 'TLSv1.2'
+  }
 };
 
 let pool;
@@ -108,6 +111,7 @@ async function initializeDatabase() {
     console.log('🔍 DEBUG: MYSQLUSER:', process.env.MYSQLUSER || 'Not set');
     console.log('🔍 DEBUG: MYSQLDATABASE:', process.env.MYSQLDATABASE || 'Not set');
     console.log('🔍 DEBUG: MYSQLPORT:', process.env.MYSQLPORT || 'Not set');
+    console.log('🔍 DEBUG: Full dbConfig:', JSON.stringify(dbConfig, null, 2));
 
     pool = mysql.createPool(dbConfig);
     
