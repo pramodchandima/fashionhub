@@ -45,6 +45,14 @@ console.log('   LOCAL IP:', LOCAL_IP);
 console.log('   EMAIL_HOST:', EMAIL_HOST);
 console.log('   EMAIL_USER:', EMAIL_USER ? '✓ Set' : '✗ Not set');
 
+// Add this RIGHT AFTER the EMAIL configuration
+console.log('📧 CURRENT EMAIL CONFIG:');
+console.log('   EMAIL_USER:', EMAIL_USER);
+console.log('   EMAIL_PASS length:', EMAIL_PASS ? EMAIL_PASS.length : 'NOT SET');
+console.log('   EMAIL_PASS first 4 chars:', EMAIL_PASS ? EMAIL_PASS.substring(0, 4) + '...' : 'NOT SET');
+console.log('   ADMIN_EMAIL:', ADMIN_EMAIL);
+console.log('   Using real email?', EMAIL_USER !== 'your-email@gmail.com' ? 'YES' : 'NO');
+
 // === MIDDLEWARE ===
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
