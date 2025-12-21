@@ -6,7 +6,7 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs').promises;
 const jwt = require('jsonwebtoken'); 
-const nodemailer = require('nodemailer'); 
+const { Resend } = require('resend');  // ✅ REPLACED nodemailer with Resend
 const os = require('os');
 require('dotenv').config();
 
@@ -33,25 +33,21 @@ const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-key-change-in-productio
 
 // === EMAIL CONFIGURATION ===
 const EMAIL_USER = process.env.EMAIL_USER || 'your-email@gmail.com';
-const EMAIL_PASS = process.env.EMAIL_PASSWORD || '';
-const EMAIL_HOST = process.env.EMAIL_HOST || 'smtp.gmail.com';
-const EMAIL_PORT = process.env.EMAIL_PORT || 587;
+const RESEND_API_KEY = process.env.RESEND_API_KEY || '';  // ✅ NEW: Resend API Key
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@example.com';
 
 console.log('🔧 Environment Check:');
 console.log('   PORT:', PORT);
 console.log('   Database:', process.env.DATABASE_URL ? '✅ Connected via DATABASE_URL' : '❌ Not connected');
 console.log('   LOCAL IP:', LOCAL_IP);
-console.log('   EMAIL_HOST:', EMAIL_HOST);
-console.log('   EMAIL_USER:', EMAIL_USER ? '✓ Set' : '✗ Not set');
+console.log('   EMAIL_SERVICE:', RESEND_API_KEY ? '✅ Resend API' : '❌ Not configured');
 
 // Add this RIGHT AFTER the EMAIL configuration
 console.log('📧 CURRENT EMAIL CONFIG:');
 console.log('   EMAIL_USER:', EMAIL_USER);
-console.log('   EMAIL_PASS length:', EMAIL_PASS ? EMAIL_PASS.length : 'NOT SET');
-console.log('   EMAIL_PASS first 4 chars:', EMAIL_PASS ? EMAIL_PASS.substring(0, 4) + '...' : 'NOT SET');
+console.log('   RESEND_API_KEY exists?:', RESEND_API_KEY ? '✓ YES' : '✗ NO');
 console.log('   ADMIN_EMAIL:', ADMIN_EMAIL);
-console.log('   Using real email?', EMAIL_USER !== 'your-email@gmail.com' ? 'YES' : 'NO');
+console.log('   Using Resend?', RESEND_API_KEY ? 'YES' : 'NO');
 
 // === MIDDLEWARE ===
 app.use(express.json({ limit: '10mb' }));
@@ -326,6 +322,80 @@ const getFullUrl = (req, path) => {
     return path;
 };
 
+// === UPDATED: Email sending function with RESEND ===
+async function sendContactEmails({ name, email, subject, message, messageId }) {
+    console.log('📧 Attempting to send emails via Resend API...');
+    
+    let emailSuccess = false;
+    
+    // Validate the API key is present
+    if (!RESEND_API_KEY) {
+        console.error('❌ RESEND_API_KEY is not set in environment variables.');
+        return false;
+    }
+
+    try {
+        const resend = new Resend(RESEND_API_KEY);
+        const adminRecipient = ADMIN_EMAIL || EMAIL_USER;
+
+        // 1. Send email to Admin (you)
+        console.log(`📨 Sending notification to admin: ${adminRecipient}`);
+        const adminData = await resend.emails.send({
+            from: 'FashionHub <onboarding@resend.dev>', // Use Resend's default domain
+            to: adminRecipient,
+            reply_to: email,
+            subject: `New Contact: ${subject} (Message #${messageId})`,
+            html: `
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                    <h2 style="color: #333;">New Contact Form Submission</h2>
+                    <div style="background-color: #f9f9f9; padding: 20px; border-radius: 5px;">
+                        <p><strong>Message ID:</strong> #${messageId}</p>
+                        <p><strong>Name:</strong> ${name}</p>
+                        <p><strong>Email:</strong> <a href="mailto:${email}">${email}</a></p>
+                        <p><strong>Subject:</strong> ${subject}</p>
+                        <p><strong>Time:</strong> ${new Date().toLocaleString()}</p>
+                        <hr>
+                        <p><strong>Message:</strong></p>
+                        <p style="white-space: pre-wrap; background-color: white; padding: 15px; border-radius: 3px;">${message}</p>
+                    </div>
+                </div>
+            `
+        });
+
+        console.log(`✅ Admin email sent via Resend. ID: ${adminData.id}`);
+
+        // 2. Send auto-reply to the user
+        console.log(`📨 Sending auto-reply to user: ${email}`);
+        const userData = await resend.emails.send({
+            from: 'FashionHub <onboarding@resend.dev>',
+            to: email,
+            subject: 'Thank you for contacting FashionHub',
+            html: `
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                    <h2 style="color: #4CAF50;">Thank You for Contacting Us!</h2>
+                    <p>Dear ${name},</p>
+                    <p>We have received your message and will get back to you as soon as possible.</p>
+                    <div style="background-color: #f5f5f5; padding: 15px; border-radius: 5px; margin: 20px 0;">
+                        <p><strong>Your Message (Preview):</strong></p>
+                        <p style="font-style: italic;">"${message.substring(0, 150)}${message.length > 150 ? '...' : ''}"</p>
+                    </div>
+                    <p>We typically respond within 24 hours.</p>
+                    <p>Best regards,<br>The FashionHub Team</p>
+                </div>
+            `
+        });
+
+        console.log(`✅ User auto-reply sent via Resend. ID: ${userData.id}`);
+        emailSuccess = true;
+        
+    } catch (error) {
+        console.error('❌ Resend API Error:', error.message);
+        emailSuccess = false;
+    }
+    
+    return emailSuccess;
+}
+
 // === CONTACT FORM ROUTE ===
 app.post('/api/contact', async (req, res) => {
     try {
@@ -387,7 +457,7 @@ app.post('/api/contact', async (req, res) => {
         
         // Try to send emails
         let emailSent = false;
-        if (EMAIL_USER && EMAIL_PASS && EMAIL_USER !== 'your-email@gmail.com') {
+        if (RESEND_API_KEY) {
             emailSent = await sendContactEmails({
                 name: sanitizedName,
                 email: sanitizedEmail,
@@ -420,138 +490,10 @@ app.post('/api/contact', async (req, res) => {
     }
 });
 
-// Email sending function
-async function sendContactEmails({ name, email, subject, message, messageId }) {
-    // 🔍 ADDED: Email configuration debug
-    console.log('📧 Email Configuration Debug:');
-    console.log('   EMAIL_USER:', EMAIL_USER);
-    console.log('   EMAIL_PASS exists?:', EMAIL_PASS ? 'YES' : 'NO');
-    console.log('   ADMIN_EMAIL:', ADMIN_EMAIL);
-    console.log('   EMAIL_HOST:', EMAIL_HOST);
-    console.log('   EMAIL_PORT:', EMAIL_PORT);
-    
-    let emailSuccess = false;
-    
-    try {
-        console.log('📤 Attempting to send emails...');
-        
-        // Create transporter
-        const transporter = nodemailer.createTransport({
-            host: EMAIL_HOST,
-            port: EMAIL_PORT,
-            secure: EMAIL_PORT === 465,
-            auth: {
-                user: EMAIL_USER,
-                pass: EMAIL_PASS
-            },
-            tls: {
-                rejectUnauthorized: false
-            }
-        });
-        
-        // Verify connection
-        console.log('🔍 Verifying email server connection...');
-        await transporter.verify();
-        console.log('✅ Email server connection verified');
-        
-        // Determine recipient
-        const adminRecipient = ADMIN_EMAIL || EMAIL_USER;
-        console.log(`📧 Sending admin email to: ${adminRecipient}`);
-        
-        // Email 1: To Admin
-        const adminMailOptions = {
-            from: `"FashionHub Contact" <${EMAIL_USER}>`,
-            to: adminRecipient,
-            replyTo: email,
-            subject: `New Contact: ${subject} (Message #${messageId})`,
-            html: `
-                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                    <h2 style="color: #333;">New Contact Form Submission</h2>
-                    <div style="background-color: #f9f9f9; padding: 20px; border-radius: 5px;">
-                        <p><strong>Message ID:</strong> #${messageId}</p>
-                        <p><strong>Name:</strong> ${name}</p>
-                        <p><strong>Email:</strong> <a href="mailto:${email}">${email}</a></p>
-                        <p><strong>Subject:</strong> ${subject}</p>
-                        <p><strong>Time:</strong> ${new Date().toLocaleString()}</p>
-                        <hr>
-                        <p><strong>Message:</strong></p>
-                        <p style="white-space: pre-wrap; background-color: white; padding: 15px; border-radius: 3px;">${message}</p>
-                    </div>
-                </div>
-            `,
-            text: `
-New Contact Form Message
-=======================
-Message ID: #${messageId}
-Name: ${name}
-Email: ${email}
-Subject: ${subject}
-Time: ${new Date().toLocaleString()}
-
-Message:
-${message}
-            `
-        };
-        
-        // Email 2: Auto-reply to User
-        const userMailOptions = {
-            from: `"FashionHub" <${EMAIL_USER}>`,
-            to: email,
-            subject: 'Thank you for contacting FashionHub',
-            html: `
-                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                    <h2 style="color: #4CAF50;">Thank You for Contacting Us!</h2>
-                    <p>Dear ${name},</p>
-                    <p>We have received your message and will get back to you as soon as possible.</p>
-                    <div style="background-color: #f5f5f5; padding: 15px; border-radius: 5px; margin: 20px 0;">
-                        <p><strong>Your Message (Preview):</strong></p>
-                        <p style="font-style: italic;">"${message.substring(0, 150)}${message.length > 150 ? '...' : ''}"</p>
-                    </div>
-                    <p>We typically respond within 24 hours.</p>
-                    <p>Best regards,<br>The FashionHub Team</p>
-                </div>
-            `,
-            text: `
-Thank You for Contacting FashionHub!
-
-Dear ${name},
-
-We have received your message and will get back to you as soon as possible.
-
-Your Message (Preview):
-"${message.substring(0, 200)}${message.length > 200 ? '...' : ''}"
-
-We typically respond within 24 hours.
-
-Best regards,
-The FashionHub Team
-            `
-        };
-        
-        // Send emails
-        console.log('📨 Sending email to admin...');
-        const adminInfo = await transporter.sendMail(adminMailOptions);
-        console.log(`✅ Admin email sent: ${adminInfo.messageId}`);
-        
-        console.log('📨 Sending auto-reply to user...');
-        const userInfo = await transporter.sendMail(userMailOptions);
-        console.log(`✅ User auto-reply sent: ${userInfo.messageId}`);
-        
-        emailSuccess = true;
-        console.log('🎉 Both emails sent successfully!');
-        
-    } catch (emailError) {
-        console.error('⚠️ Email sending failed:', emailError.message);
-        emailSuccess = false;
-    }
-    
-    return emailSuccess;
-}
-
 // ============= PUBLIC API ROUTES =============
 
 app.get('/api/health', (req, res) => {
-    const emailConfigured = EMAIL_USER && EMAIL_PASS && EMAIL_USER !== 'your-email@gmail.com';
+    const emailConfigured = RESEND_API_KEY ? true : false;
     
     res.json({ 
         status: 'healthy', 
@@ -559,7 +501,7 @@ app.get('/api/health', (req, res) => {
         database: pool ? 'connected' : 'disconnected',
         email: {
             configured: emailConfigured,
-            host: EMAIL_HOST,
+            service: 'Resend API',
             user: EMAIL_USER,
             admin: ADMIN_EMAIL
         },
@@ -570,40 +512,31 @@ app.get('/api/health', (req, res) => {
     });
 });
 
-// 🆕 ADDED: Test Email Route
+// 🆕 UPDATED: Test Email Route with RESEND
 app.get('/api/test-email', async (req, res) => {
   try {
-    console.log('📧 Testing email configuration...');
-    console.log('EMAIL_USER:', EMAIL_USER);
-    console.log('EMAIL_PASS exists?:', EMAIL_PASS ? 'YES' : 'NO');
+    console.log('📧 Testing Resend email configuration...');
     
-    const transporter = nodemailer.createTransport({
-      host: EMAIL_HOST,
-      port: EMAIL_PORT,
-      secure: EMAIL_PORT === 465,
-      auth: {
-        user: EMAIL_USER,
-        pass: EMAIL_PASS
-      },
-      tls: { rejectUnauthorized: false }
-    });
+    if (!RESEND_API_KEY) {
+        throw new Error('RESEND_API_KEY is not set in environment variables.');
+    }
+
+    const resend = new Resend(RESEND_API_KEY);
     
-    await transporter.verify();
-    
-    const info = await transporter.sendMail({
-      from: `"FashionHub Test" <${EMAIL_USER}>`,
+    const data = await resend.emails.send({
+      from: 'FashionHub <onboarding@resend.dev>',
       to: ADMIN_EMAIL || EMAIL_USER,
       subject: 'Test Email from FashionHub',
-      text: 'If you get this, emails are working!'
+      html: '<strong>If you get this, emails are working via Resend!</strong>'
     });
-    
+
     res.json({ 
       success: true, 
-      message: 'Test email sent! Check your inbox.',
-      messageId: info.messageId 
+      message: 'Test email sent via Resend! Check your inbox.',
+      emailId: data.id 
     });
   } catch (error) {
-    console.error('Email test error:', error);
+    console.error('Resend test error:', error);
     res.status(500).json({ 
       success: false, 
       error: error.message 
