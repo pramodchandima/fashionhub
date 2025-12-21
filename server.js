@@ -414,6 +414,14 @@ app.post('/api/contact', async (req, res) => {
 
 // Email sending function
 async function sendContactEmails({ name, email, subject, message, messageId }) {
+    // 🔍 ADDED: Email configuration debug
+    console.log('📧 Email Configuration Debug:');
+    console.log('   EMAIL_USER:', EMAIL_USER);
+    console.log('   EMAIL_PASS exists?:', EMAIL_PASS ? 'YES' : 'NO');
+    console.log('   ADMIN_EMAIL:', ADMIN_EMAIL);
+    console.log('   EMAIL_HOST:', EMAIL_HOST);
+    console.log('   EMAIL_PORT:', EMAIL_PORT);
+    
     let emailSuccess = false;
     
     try {
@@ -552,6 +560,47 @@ app.get('/api/health', (req, res) => {
             accessUrl: `http://${LOCAL_IP}:${PORT}`
         }
     });
+});
+
+// 🆕 ADDED: Test Email Route
+app.get('/api/test-email', async (req, res) => {
+  try {
+    console.log('📧 Testing email configuration...');
+    console.log('EMAIL_USER:', EMAIL_USER);
+    console.log('EMAIL_PASS exists?:', EMAIL_PASS ? 'YES' : 'NO');
+    
+    const transporter = nodemailer.createTransport({
+      host: EMAIL_HOST,
+      port: EMAIL_PORT,
+      secure: EMAIL_PORT === 465,
+      auth: {
+        user: EMAIL_USER,
+        pass: EMAIL_PASS
+      },
+      tls: { rejectUnauthorized: false }
+    });
+    
+    await transporter.verify();
+    
+    const info = await transporter.sendMail({
+      from: `"FashionHub Test" <${EMAIL_USER}>`,
+      to: ADMIN_EMAIL || EMAIL_USER,
+      subject: 'Test Email from FashionHub',
+      text: 'If you get this, emails are working!'
+    });
+    
+    res.json({ 
+      success: true, 
+      message: 'Test email sent! Check your inbox.',
+      messageId: info.messageId 
+    });
+  } catch (error) {
+    console.error('Email test error:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message 
+    });
+  }
 });
 
 // Network access test
