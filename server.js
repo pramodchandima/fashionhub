@@ -1426,24 +1426,39 @@ app.use((err, req, res, next) => {
 });
 
 // ============= START SERVER =============
-async function startServer() {
-    try {
-      const dbSuccess = await initializeDatabase();
-      
-      if (dbSuccess) {
-        console.log('✅ Database initialized successfully');
-      } else {
-        console.log('⚠️ Server starting WITHOUT database');
-      }
-      
-      app.listen(PORT, '0.0.0.0', () => {
-        console.log(`🚀 Server running on port ${PORT}`);
-      });
-    } catch (error) {
-      console.error('❌ Failed to start server:', error);
-      process.exit(1);
-    }
+// ✅ CORRECT: Function is defined BEFORE it's called
+async function initializeDatabase() {
+  try {
+    console.log('🔍 DEBUG: ALL environment variables:');
+    // ... your database connection code ...
+    return true; // Success
+    
+  } catch (error) {
+    console.error('⚠️ Database connection failed:', error.message);
+    console.log('⚠️ Starting server WITHOUT database (frontend will still work)...');
+    pool = null;
+    return false; // Failure
   }
+}
 
+// ✅ This should be AFTER the function definition
+async function startServer() {
+  try {
+    const dbSuccess = await initializeDatabase(); // Now this works
+    
+    if (dbSuccess) {
+      console.log('✅ Database initialized successfully');
+    } else {
+      console.log('⚠️ Server starting WITHOUT database');
+    }
+    
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`🚀 Server running on port ${PORT}`);
+    });
+  } catch (error) {
+    console.error('❌ Failed to start server:', error);
+    process.exit(1);
+  }
+}
 // Start the server
 startServer();
