@@ -1,5 +1,7 @@
+# .gitignore
+fix-frontend.js
+check-urls.js
 node_modules/
-.env
 uploads/
+.env
 *.log
-.DS_Store
