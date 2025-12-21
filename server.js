@@ -100,56 +100,35 @@ const dbConfig = connectionString ? {
 
 let pool;
 
-async function sendContactEmails({ name, email, subject, message, messageId }) {
-  console.log('📧 Attempting to send emails via Resend API...');
-  
-  // ... (your existing setup code)
-
+async function initializeDatabase() {
   try {
-      const resend = new Resend(RESEND_API_KEY);
-      const adminRecipient = ADMIN_EMAIL || EMAIL_USER;
-
-      // 1. Send email to Admin
-      console.log(`📨 Sending notification to admin: ${adminRecipient}`);
-      const adminResult = await resend.emails.send({ // <-- Changed variable name
-          from: 'FashionHub <onboarding@resend.dev>',
-          to: adminRecipient,
-          reply_to: email,
-          subject: `New Contact: ${subject} (Message #${messageId})`,
-          html: `...` // your HTML here
-      });
-
-      // ✅ CRITICAL FIX: Check for an error in the result
-      if (adminResult.error) {
-          console.error('❌ Resend API returned an error for admin email:', adminResult.error);
-          // Don't try to send the user email if admin email failed
-          return false;
+    console.log('🔍 DEBUG: ALL environment variables:');
+      for (const key in process.env) {
+        console.log(`  ${key}: ${process.env[key]}`);
       }
+    console.log('🔍 DEBUG: connectionString:', process.env.DATABASE_URL || 'Not set');
+    console.log('🔍 DEBUG: MYSQLHOST:', process.env.MYSQLHOST || 'Not set');
+    console.log('🔍 DEBUG: MYSQLUSER:', process.env.MYSQLUSER || 'Not set');
+    console.log('🔍 DEBUG: MYSQLDATABASE:', process.env.MYSQLDATABASE || 'Not set');
+    console.log('🔍 DEBUG: MYSQLPORT:', process.env.MYSQLPORT || 'Not set');
+    console.log('🔍 DEBUG: Full dbConfig:', JSON.stringify(dbConfig, null, 2));
 
-      // ✅ Now it's safe to log the ID
-      console.log(`✅ Admin email sent via Resend. ID: ${adminResult.data.id}`);
-
-      // 2. Send auto-reply to the user (apply the same fix here)
-      console.log(`📨 Sending auto-reply to user: ${email}`);
-      const userResult = await resend.emails.send({ // <-- Changed variable name
-          from: 'FashionHub <onboarding@resend.dev>',
-          to: email,
-          subject: 'Thank you for contacting FashionHub',
-          html: `...` // your HTML here
-      });
-
-      if (userResult.error) {
-          console.error('❌ Resend API returned an error for user email:', userResult.error);
-          // Admin email succeeded, but user email failed
-          return false;
-      }
-
-      console.log(`✅ User auto-reply sent via Resend. ID: ${userResult.data.id}`);
-      return true;
-      
+    pool = mysql.createPool(dbConfig);
+    
+    // Test connection
+    const connection = await pool.getConnection();
+    console.log('✅ Database connected successfully');
+    connection.release();
+    
+    // Create tables if they don't exist
+    await createTables();
+    return true; // Success
+    
   } catch (error) {
-      console.error('❌ Unexpected error in sendContactEmails:', error);
-      return false;
+    console.error('⚠️ Database connection failed:', error.message);
+    console.log('⚠️ Starting server WITHOUT database (frontend will still work)...');
+    pool = null;  // Don't crash, just set pool to null
+    return false; // Failure
   }
 }
 
@@ -1426,39 +1405,24 @@ app.use((err, req, res, next) => {
 });
 
 // ============= START SERVER =============
-// ✅ CORRECT: Function is defined BEFORE it's called
-async function initializeDatabase() {
-  try {
-    console.log('🔍 DEBUG: ALL environment variables:');
-    // ... your database connection code ...
-    return true; // Success
-    
-  } catch (error) {
-    console.error('⚠️ Database connection failed:', error.message);
-    console.log('⚠️ Starting server WITHOUT database (frontend will still work)...');
-    pool = null;
-    return false; // Failure
-  }
-}
-
-// ✅ This should be AFTER the function definition
 async function startServer() {
-  try {
-    const dbSuccess = await initializeDatabase(); // Now this works
-    
-    if (dbSuccess) {
-      console.log('✅ Database initialized successfully');
-    } else {
-      console.log('⚠️ Server starting WITHOUT database');
+    try {
+      const dbSuccess = await initializeDatabase();
+      
+      if (dbSuccess) {
+        console.log('✅ Database initialized successfully');
+      } else {
+        console.log('⚠️ Server starting WITHOUT database');
+      }
+      
+      app.listen(PORT, '0.0.0.0', () => {
+        console.log(`🚀 Server running on port ${PORT}`);
+      });
+    } catch (error) {
+      console.error('❌ Failed to start server:', error);
+      process.exit(1);
     }
-    
-    app.listen(PORT, '0.0.0.0', () => {
-      console.log(`🚀 Server running on port ${PORT}`);
-    });
-  } catch (error) {
-    console.error('❌ Failed to start server:', error);
-    process.exit(1);
   }
-}
+
 // Start the server
 startServer();
