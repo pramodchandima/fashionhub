@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # Dependencies
 node_modules/
 frontend/node_modules/
@@ -37,9 +36,14 @@ Thumbs.db
 .vscode/
 .idea/
 
+# Scripts
+fix-frontend.js
+check-urls.js
+
 # Media Assets (Images and Videos)
 Images/
 backend/uploads/**
+uploads/
 *.jpg
 *.jpeg
 *.png
@@ -55,12 +59,3 @@ backend/uploads/**
 # Database
 # If you want to exclude SQL dumps, uncomment the line below
 # clothing_store.sql
-=======
-# .gitignore
-fix-frontend.js
-check-urls.js
-node_modules/
-uploads/
-.env
-*.log
->>>>>>> ec27def001d389dd2376ef6de7fa23f6d6bb8b89

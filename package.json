@@ -1,8 +1,4 @@
 {
-<<<<<<< HEAD
-  "devDependencies": {
-    "tailwindcss": "^3.4.19"
-=======
   "name": "fashionhub",
   "version": "1.0.0",
   "description": "Clothing Store - React + Node.js",
@@ -23,8 +19,10 @@
     "nodemailer": "^6.9.3",
     "resend": "^6.6.0"
   },
+  "devDependencies": {
+    "tailwindcss": "^3.4.19"
+  },
   "engines": {
     "node": ">=14.0.0"
->>>>>>> ec27def001d389dd2376ef6de7fa23f6d6bb8b89
   }
 }
