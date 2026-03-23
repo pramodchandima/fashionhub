@@ -36,9 +36,20 @@ Thumbs.db
 .vscode/
 .idea/
 
-# Backend Uploads
-backend/uploads/*
-!backend/uploads/.gitkeep
+# Media Assets (Images and Videos)
+Images/
+backend/uploads/**
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.svg
+*.webp
+*.ico
+*.mp4
+*.webm
+*.ogg
+*.mov
 
 # Database
 # If you want to exclude SQL dumps, uncomment the line below
