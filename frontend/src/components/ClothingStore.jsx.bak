@@ -1,0 +1,1062 @@
+import React, { useState, useEffect } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import {
+  Menu,
+  X,
+  Phone,
+  MapPin,
+  Mail,
+  Facebook,
+  Instagram,
+  Twitter,
+  MessageCircle,
+  Truck,
+  ShieldCheck,
+  Leaf,
+  Star,
+  Send,
+  Check,
+  ArrowLeft,
+} from "lucide-react";
+
+// ===== AUTO-DETECT URLS =====
+const hostname = window.location.hostname;
+const isLocalhost = hostname === "localhost" || hostname === "127.0.0.1";
+
+// Auto-detect backend URL
+const SERVER_URL = isLocalhost
+  ? "http://localhost:5000"
+  : `http://${hostname}:5000`;
+
+const API_BASE = `${SERVER_URL}/api`;
+
+console.log("🌐 URL Configuration:", {
+  hostname,
+  isLocalhost,
+  SERVER_URL,
+  API_BASE,
+  currentPage: window.location.href,
+});
+
+const ClothingStore = () => {
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  // Determine initial page based on URL
+  const getInitialPage = () => {
+    const path = location.pathname.substring(1);
+    if (path === "" || path === "contact" || path === "about") return "home";
+    if (path === "shop") return "categories";
+    return path;
+  };
+
+  const [currentPage, setCurrentPage] = useState(getInitialPage());
+  const [categories, setCategories] = useState([]);
+  const [products, setProducts] = useState([]);
+
+  // Selection States
+  const [selectedCategory, setSelectedCategory] = useState(null);
+  const [selectedProduct, setSelectedProduct] = useState(null);
+  const [quantity, setQuantity] = useState(1);
+  const [selectedColor, setSelectedColor] = useState(null);
+  const [selectedSize, setSelectedSize] = useState(null);
+  const sizes = ["S", "M", "L", "XL", "XXL"];
+
+  // UI States
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [contactForm, setContactForm] = useState({
+    name: "",
+    email: "",
+    subject: "",
+    message: "",
+  });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const whatsappNumber = process.env.REACT_APP_WHATSAPP_NUMBER || "94789933967";
+
+  // --- EFFECT HOOKS ---
+
+  // Scroll to top when product opens
+  useEffect(() => {
+    if (currentPage === "product") {
+      window.scrollTo(0, 0);
+    }
+  }, [currentPage, selectedProduct]);
+
+  // Handle URL Routing & Scrolling
+  useEffect(() => {
+    let path = location.pathname.substring(1);
+    if (path === "shop") path = "categories";
+
+    if (path === "contact") {
+      setCurrentPage("home");
+      setTimeout(() => {
+        const section = document.getElementById("contact-section");
+        if (section) section.scrollIntoView({ behavior: "smooth" });
+      }, 100);
+    } else if (path === "about") {
+      setCurrentPage("home");
+      setTimeout(() => {
+        const section = document.getElementById("about-section");
+        if (section) section.scrollIntoView({ behavior: "smooth" });
+      }, 100);
+    } else if (["home", "categories"].includes(path)) {
+      setCurrentPage(path);
+      window.scrollTo(0, 0);
+      if (path === "categories" && !selectedCategory) {
+        fetchProducts();
+        setSelectedCategory(null);
+      }
+    } else if (path === "") {
+      setCurrentPage("home");
+      window.scrollTo(0, 0);
+    }
+  }, [location]);
+
+  // Data Fetching
+  useEffect(() => {
+    fetchCategories();
+    fetchProducts();
+  }, []);
+
+  const fetchCategories = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/categories`);
+      const data = await response.json();
+      if (Array.isArray(data)) setCategories(data);
+      else setCategories([]);
+    } catch (error) {
+      console.error("Error fetching categories:", error);
+      setCategories([]);
+    }
+  };
+
+  const fetchProducts = async (categoryId = null) => {
+    try {
+      const url = categoryId
+        ? `${API_BASE}/products?category=${categoryId}`
+        : `${API_BASE}/products`;
+      const response = await fetch(url);
+      const data = await response.json();
+      if (Array.isArray(data)) setProducts(data);
+      else setProducts([]);
+    } catch (error) {
+      console.error("Error fetching products:", error);
+      setProducts([]);
+    }
+  };
+
+  // --- HANDLERS ---
+
+  const navigateTo = (page) => {
+    setCurrentPage(page);
+    window.scrollTo(0, 0);
+    if (page === "home") navigate("/");
+    else if (page === "categories") navigate("/shop");
+    else navigate(`/${page}`);
+  };
+
+  const getImageUrl = (imagePath) => {
+    if (!imagePath) return "";
+
+    // If already a full URL, return as is
+    if (imagePath.startsWith("http")) return imagePath;
+
+    // Convert relative path to full URL
+    if (imagePath.startsWith("/uploads")) {
+      return `${SERVER_URL}${imagePath}`;
+    }
+
+    // Just a filename - assume it's in uploads/products
+    if (imagePath && !imagePath.includes("/")) {
+      return `${SERVER_URL}/uploads/products/${imagePath}`;
+    }
+
+    return imagePath;
+  };
+
+  const handleCategoryClick = (category) => {
+    setSelectedCategory(category);
+    setCurrentPage("category");
+    fetchProducts(category.category_id || category.id);
+  };
+
+  const handleProductClick = (product) => {
+    setSelectedProduct(product);
+    if (product.colors && product.colors.length > 0)
+      setSelectedColor(product.colors[0]);
+    else setSelectedColor(null);
+    setSelectedSize(null);
+    setQuantity(1);
+    setCurrentPage("product");
+  };
+
+  const getTotalPrice = () => {
+    const price = selectedProduct?.base_price || selectedProduct?.price || 0;
+    return price * quantity;
+  };
+
+  // --- CONTACT FORM HANDLER ---
+  const handleContactChange = (e) => {
+    const { name, value } = e.target;
+    setContactForm((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleContactSubmit = async (e) => {
+    e.preventDefault();
+    if (!contactForm.name || !contactForm.email || !contactForm.message) {
+      alert("Please fill in all required fields.");
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      const response = await fetch(`${API_BASE}/contact`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(contactForm),
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        alert("✅ Message Sent! We will contact you shortly.");
+        setContactForm({ name: "", email: "", subject: "", message: "" });
+      } else {
+        alert(`❌ Failed to send: ${result.error || "Unknown error"}`);
+      }
+    } catch (error) {
+      console.error("Contact Form Error:", error);
+      alert("⚠️ Server error. Check if Backend is running or try WhatsApp.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // --- ORDER HANDLER ---
+  const handlePlaceOrder = async () => {
+    if (!selectedProduct) return;
+
+    if (
+      selectedProduct.colors &&
+      selectedProduct.colors.length > 0 &&
+      !selectedColor
+    ) {
+      alert("Please select a color.");
+      return;
+    }
+
+    if (!selectedSize) {
+      alert("Please select a size.");
+      return;
+    }
+
+    const price = selectedProduct.base_price || selectedProduct.price;
+    const colorName = selectedColor
+      ? selectedColor.color_name || selectedColor.name
+      : "Standard";
+
+    try {
+      const orderData = {
+        customerName: "WhatsApp Customer",
+        totalAmount: price * quantity,
+        items: [
+          {
+            productId: selectedProduct.product_id || selectedProduct.id,
+            color: colorName,
+            size: selectedSize,
+            quantity: quantity,
+            price: price,
+          },
+        ],
+      };
+
+      const response = await fetch(`${API_BASE}/orders`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(orderData),
+      });
+
+      const result = await response.json();
+
+      if (!result.success) {
+        alert("Order Failed: " + (result.error || "Check server console"));
+        return;
+      }
+
+      const message = `👋 *Hi FashionHub!* I would like to confirm my order.
+
+🛒 *ORDER SUMMARY*
+━━━━━━━━━━━━━━━━━━
+🆔 *Order No:* #${result.orderId}
+👗 *Item:* ${selectedProduct.product_name || selectedProduct.name}
+📏 *Size:* ${selectedSize}
+🎨 *Color:* ${colorName}
+🔢 *Quantity:* ${quantity}
+🏷️ *Unit Price:* Rs. ${price.toLocaleString()}
+━━━━━━━━━━━━━━━━━━
+💰 *GRAND TOTAL: Rs. ${(price * quantity).toLocaleString()}*
+━━━━━━━━━━━━━━━━━━`;
+
+      const whatsappUrl = `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(
+        message
+      )}`;
+      window.open(whatsappUrl, "_blank");
+    } catch (error) {
+      console.error("Order failed", error);
+      alert("Could not connect to server. Is backend running?");
+    }
+  };
+
+  const scrollToSection = (sectionId) => {
+    if (currentPage !== "home") {
+      setCurrentPage("home");
+      navigate("/");
+      setTimeout(() => {
+        const section = document.getElementById(sectionId);
+        if (section) section.scrollIntoView({ behavior: "smooth" });
+      }, 100);
+    } else {
+      const section = document.getElementById(sectionId);
+      if (section) section.scrollIntoView({ behavior: "smooth" });
+    }
+    setMenuOpen(false);
+  };
+
+  // --- RENDER FUNCTIONS ---
+
+  const renderNavigation = () => (
+    <nav className="bg-white shadow-md sticky top-0 z-50 hidden md:block">
+      {/* The rest of your navigation code remains the same */}
+      <div className="max-w-7xl mx-auto px-4">
+        <div className="flex justify-between items-center h-16">
+          <div className="flex items-center">
+            <h1
+              className="text-2xl font-bold text-gray-800 cursor-pointer"
+              onClick={() => {
+                navigateTo("home");
+                fetchProducts();
+              }}
+            >
+              FashionHub
+            </h1>
+          </div>
+
+          <div className="hidden md:flex flex-grow justify-center gap-8">
+            <button
+              onClick={() => {
+                navigateTo("home");
+                fetchProducts();
+              }}
+              className="text-gray-700 hover:text-blue-600 font-medium"
+            >
+              Home
+            </button>
+            <button
+              onClick={() => {
+                setSelectedCategory(null);
+                fetchProducts();
+                navigateTo("categories");
+              }}
+              className="text-gray-700 hover:text-blue-600 font-medium"
+            >
+              Shop
+            </button>
+            <button
+              onClick={() => scrollToSection("about-section")}
+              className="text-gray-700 hover:text-blue-600 font-medium"
+            >
+              About Us
+            </button>
+            <button
+              onClick={() => scrollToSection("contact-section")}
+              className="text-gray-700 hover:text-blue-600 font-medium"
+            >
+              Contact
+            </button>
+          </div>
+
+          <button className="md:hidden" onClick={() => setMenuOpen(!menuOpen)}>
+            {menuOpen ? <X size={24} /> : <Menu size={24} />}
+          </button>
+        </div>
+
+        {menuOpen && (
+          <div className="md:hidden pb-4">
+            <button
+              onClick={() => {
+                navigateTo("home");
+                setMenuOpen(false);
+              }}
+              className="block w-full text-left py-2 text-gray-700 px-2 hover:bg-gray-50"
+            >
+              Home
+            </button>
+            <button
+              onClick={() => {
+                setSelectedCategory(null);
+                fetchProducts();
+                navigateTo("categories");
+                setMenuOpen(false);
+              }}
+              className="block w-full text-left py-2 text-gray-700 px-2 hover:bg-gray-50"
+            >
+              Shop
+            </button>
+            <button
+              onClick={() => {
+                scrollToSection("about-section");
+                setMenuOpen(false);
+              }}
+              className="block w-full text-left py-2 text-gray-700 px-2 hover:bg-gray-50"
+            >
+              About Us
+            </button>
+            <button
+              onClick={() => {
+                scrollToSection("contact-section");
+                setMenuOpen(false);
+              }}
+              className="block w-full text-left py-2 text-gray-700 px-2 hover:bg-gray-50"
+            >
+              Contact
+            </button>
+          </div>
+        )}
+      </div>
+    </nav>
+  );
+
+  const renderHomePage = () => (
+    <div className="animate-fade-in">
+      {/* 1. HERO */}
+      <div className="bg-gradient-to-r from-blue-500 to-purple-600 text-white py-20 relative overflow-hidden">
+        <div className="max-w-7xl mx-auto px-4 text-center relative z-10">
+          <h2 className="text-5xl font-bold mb-6 leading-tight">
+            Define Your Style.
+            <br />
+            Embrace the Trend.
+          </h2>
+          <p className="text-xl mb-8 text-blue-100 max-w-2xl mx-auto">
+            Discover the latest collections curated just for you.
+          </p>
+          <button
+            onClick={() => {
+              setSelectedCategory(null);
+              fetchProducts();
+              navigateTo("categories");
+            }}
+            className="bg-white text-blue-600 px-10 py-4 rounded-full font-bold text-lg hover:shadow-2xl hover:-translate-y-1 transition-all duration-300"
+          >
+            Shop Collection
+          </button>
+        </div>
+      </div>
+
+      {/* 2. FEATURES */}
+      <div className="bg-white py-16 shadow-sm border-b border-gray-100">
+        <div className="max-w-7xl mx-auto px-4 grid grid-cols-1 md:grid-cols-3 gap-8 text-center">
+          <div className="flex flex-col items-center group p-6 border border-gray-100 rounded-2xl hover:border-blue-200 hover:shadow-xl hover:-translate-y-2 transition-all duration-300 bg-white">
+            <div className="bg-blue-600 p-4 rounded-full mb-4 group-hover:bg-blue-100 transition-colors">
+              <Truck className="text-blue-600" size={32} />
+            </div>
+            <h4 className="font-bold text-lg text-gray-800">
+              Islandwide Delivery
+            </h4>
+            <p className="text-gray-500 text-sm mt-2">
+              Fast & reliable delivery to your doorstep.
+            </p>
+          </div>
+          <div className="flex flex-col items-center group p-6 border border-gray-100 rounded-2xl hover:border-green-200 hover:shadow-xl hover:-translate-y-2 transition-all duration-300 bg-white">
+            <div className="bg-green-500 p-4 rounded-full mb-4 group-hover:bg-green-100 transition-colors">
+              <Leaf className="text-green-600" size={32} />
+            </div>
+            <h4 className="font-bold text-lg text-gray-800">Eco-Friendly</h4>
+            <p className="text-gray-500 text-sm mt-2">
+              Sustainable packaging & 100% organic.
+            </p>
+          </div>
+          <div className="flex flex-col items-center group p-6 border border-gray-100 rounded-2xl hover:border-purple-200 hover:shadow-xl hover:-translate-y-2 transition-all duration-300 bg-white">
+            <div className="bg-purple-600 p-4 rounded-full mb-4 group-hover:bg-purple-100 transition-colors">
+              <ShieldCheck className="text-purple-600" size={32} />
+            </div>
+            <h4 className="font-bold text-lg text-gray-800">Secure Payments</h4>
+            <p className="text-gray-500 text-sm mt-2">
+              Verified and 100% secure payment gateways.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* 3. CATEGORIES */}
+      <div className="max-w-7xl mx-auto px-4 py-16">
+        <h3 className="text-3xl font-bold text-center mb-12">
+          Shop by Category
+        </h3>
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-4 gap-3 md:gap-6">
+          {Array.isArray(categories) &&
+            categories.map((category) => (
+              <div
+                key={category.category_id || category.id}
+                onClick={() => handleCategoryClick(category)}
+                className="cursor-pointer group"
+              >
+                <div className="overflow-hidden rounded-none shadow-lg relative h-64 w-full bg-gray-100">
+                  <img
+                    src={getImageUrl(category.image_path || category.image)}
+                    alt={category.category_name || category.name}
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      e.target.src =
+                        "https://via.placeholder.com/400x400?text=No+Image";
+                    }}
+                  />
+                  {(category.hover_image_path || category.hover_image) && (
+                    <img
+                      src={getImageUrl(
+                        category.hover_image_path || category.hover_image
+                      )}
+                      alt="hover"
+                      className="absolute inset-0 w-full h-full object-cover opacity-0 group-hover:opacity-100 transition-opacity duration-500"
+                      onError={(e) => {
+                        e.target.style.display = "none";
+                      }}
+                    />
+                  )}
+                </div>
+                <h4 className="text-xl font-semibold text-center mt-4 group-hover:text-blue-600 transition-colors">
+                  {category.category_name || category.name}
+                </h4>
+              </div>
+            ))}
+        </div>
+      </div>
+
+      {/* 4. FEATURED */}
+      <div className="bg-gray-50 py-16 border-t border-gray-200">
+        <div className="max-w-7xl mx-auto px-4">
+          <div className="flex justify-between items-end mb-12">
+            <h3 className="text-3xl font-bold">Trending Now</h3>
+            <button
+              onClick={() => navigateTo("categories")}
+              className="text-blue-600 font-semibold hover:underline"
+            >
+              View All &rarr;
+            </button>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-3 gap-4 md:gap-8">
+            {Array.isArray(products) &&
+              products.slice(0, 4).map((product) => (
+                <div
+                  key={product.product_id || product.id}
+                  onClick={() => handleProductClick(product)}
+                  className="bg-white rounded-none shadow-lg overflow-hidden cursor-pointer hover:shadow-xl transition-all hover:-translate-y-2 group"
+                >
+                  <div className="h-64 overflow-hidden relative">
+                    <img
+                      src={getImageUrl(product.image_path || product.image)}
+                      alt={product.product_name || product.name}
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        e.target.src =
+                          "https://via.placeholder.com/400x400?text=No+Image";
+                      }}
+                    />
+                  </div>
+                  <div className="p-4">
+                    <h4 className="font-semibold text-lg mb-1">
+                      {product.product_name || product.name}
+                    </h4>
+                    <p className="text-gray-500 text-xs mb-3 uppercase tracking-wide">
+                      {product.category || "Collection"}
+                    </p>
+                    <div className="flex justify-between items-center">
+                      <p className="text-gray-900 font-bold text-lg">
+                        Rs.{" "}
+                        {(product.base_price || product.price).toLocaleString()}
+                      </p>
+                      <span className="text-blue-600 text-sm font-medium group-hover:translate-x-1 transition-transform">
+                        Buy Now &rarr;
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+          </div>
+        </div>
+      </div>
+
+      {/* 5. ABOUT US */}
+      <div
+        id="about-section"
+        className="py-24 bg-white border-t border-gray-100"
+      >
+        <div className="max-w-4xl mx-auto px-4 py-8 text-center">
+          <h2 className="text-4xl font-bold mb-6 text-gray-900">Who We Are</h2>
+          <p className="text-gray-600 mb-8 text-lg leading-relaxed">
+            Welcome to{" "}
+            <span className="font-bold text-blue-600">FashionHub</span>, your
+            number one source for all things fashion. We're dedicated to giving
+            you the very best of clothing, with a focus on quality, customer
+            service, and uniqueness.
+          </p>
+          <p className="text-gray-600 mb-10 text-lg leading-relaxed">
+            Founded in 2024, FashionHub has come a long way from its beginnings.
+            When we first started out, our passion for providing the best
+            fashion at affordable prices drove us to start our own business. We
+            now serve customers all over Sri Lanka and are thrilled to be a part
+            of the eco-friendly wing of the fashion industry.
+          </p>
+          <h3 className="text-3xl font-bold mb-6 text-gray-900 mt-8">
+            Our Mission
+          </h3>
+          <p className="text-gray-600 font-medium text-lg max-w-2xl mx-auto">
+            To provide high-quality, fashionable clothing that makes our
+            customers feel confident and stylish, while maintaining affordable
+            prices and excellent customer service.
+          </p>
+        </div>
+      </div>
+
+      {/* 6. TESTIMONIALS */}
+      <div className="py-16 bg-gray-50 border-t border-gray-200">
+        <div className="max-w-7xl mx-auto px-4 text-center">
+          <h3 className="text-3xl font-bold mb-10">What Our Customers Say</h3>
+          <div className="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-4 gap-8 mt-4">
+            <div className="bg-white p-8 rounded-2xl border border-gray-200 shadow-sm text-left hover:shadow-2xl hover:border-blue-200 hover:-translate-y-2 transition-all duration-300">
+              <div className="flex text-yellow-400 mb-4">
+                <Star fill="#FFD700" size={16} />
+                <Star fill="#FFD700" size={16} />
+                <Star fill="#FFD700" size={16} />
+                <Star fill="#FFD700" size={16} />
+                <Star fill="#FFD700" size={16} />
+              </div>
+              <p className="text-gray-600 italic mb-4">
+                "The fabric quality is amazing. Delivery was super fast!"
+              </p>
+              <p className="font-bold text-gray-900">- Sarah P.</p>
+            </div>
+            <div className="bg-white p-8 rounded-2xl border border-gray-200 shadow-sm text-left hover:shadow-2xl hover:border-purple-200 hover:-translate-y-2 transition-all duration-300">
+              <div className="flex text-yellow-400 mb-4">
+                <Star fill="#FFD700" size={16} />
+                <Star fill="#FFD700" size={16} />
+                <Star fill="#FFD700" size={16} />
+                <Star fill="#FFD700" size={16} />
+                <Star fill="#FFD700" size={16} />
+              </div>
+              <p className="text-gray-600 italic mb-4">
+                "Trendy designs and perfect fit. Will order again."
+              </p>
+              <p className="font-bold text-gray-900">- Dilshan M.</p>
+            </div>
+            <div className="bg-white p-8 rounded-2xl border border-gray-200 shadow-sm text-left hover:shadow-2xl hover:border-green-200 hover:-translate-y-2 transition-all duration-300">
+              <div className="flex text-yellow-400 mb-4">
+                <Star fill="#FFD700" size={16} />
+                <Star fill="#FFD700" size={16} />
+                <Star fill="#FFD700" size={16} />
+                <Star fill="#FFD700" size={16} />
+                <Star fill="#FFD700" size={16} />
+              </div>
+              <p className="text-gray-600 italic mb-4">
+                "Great customer service! Exchange was smooth."
+              </p>
+              <p className="font-bold text-gray-900">- Kasun J.</p>
+            </div>
+            <div className="bg-white p-8 rounded-2xl border border-gray-200 shadow-sm text-left hover:shadow-2xl hover:border-pink-200 hover:-translate-y-2 transition-all duration-300">
+              <div className="flex text-yellow-400 mb-4">
+                <Star fill="#FFD700" size={16} />
+                <Star fill="#FFD700" size={16} />
+                <Star fill="#FFD700" size={16} />
+                <Star fill="#FFD700" size={16} />
+                <Star fill="#FFD700" size={16} />
+              </div>
+              <p className="text-gray-600 italic mb-4">
+                "Loved the packaging and eco-friendly initiative."
+              </p>
+              <p className="font-bold text-gray-900">- Ruvini S.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 7. CONTACT US */}
+      <div
+        id="contact-section"
+        className="py-20 bg-white border-t border-gray-200"
+      >
+        <div className="max-w-4xl mx-auto px-4">
+          <h3 className="text-3xl font-bold text-center mb-12">Contact Us</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-12">
+            <div className="bg-gray-50 p-6 rounded-lg shadow-lg border border-gray-100">
+              <div className="flex items-start mb-4">
+                <MapPin className="text-blue-600 mr-3 mt-1" />
+                <div>
+                  <h3 className="font-semibold mb-1">Address</h3>
+                  <p className="text-gray-600">
+                    123 Fashion Street, Colombo 03, Sri Lanka
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-start mb-4">
+                <Phone className="text-blue-600 mr-3 mt-1" />
+                <div>
+                  <h3 className="font-semibold mb-1">Phone</h3>
+                  <p className="text-gray-600">+94 77 123 4567</p>
+                </div>
+              </div>
+              <div className="flex items-start mb-4">
+                <Mail className="text-blue-600 mr-3 mt-1" />
+                <div>
+                  <h3 className="font-semibold mb-1">Email</h3>
+                  <p className="text-gray-600">info@fashionhub.lk</p>
+                </div>
+              </div>
+            </div>
+
+            {/* FORM */}
+            <div className="bg-gray-50 p-6 rounded-lg shadow-lg border border-gray-100">
+              <h3 className="text-xl font-semibold mb-4">Send us a Message</h3>
+              <form className="space-y-4" onSubmit={handleContactSubmit}>
+                <input
+                  type="text"
+                  name="name"
+                  value={contactForm.name}
+                  onChange={handleContactChange}
+                  placeholder="Your Name"
+                  className="w-full p-3 border rounded-lg"
+                  required
+                />
+                <input
+                  type="email"
+                  name="email"
+                  value={contactForm.email}
+                  onChange={handleContactChange}
+                  placeholder="Your Email"
+                  className="w-full p-3 border rounded-lg"
+                  required
+                />
+                <input
+                  type="text"
+                  name="subject"
+                  value={contactForm.subject}
+                  onChange={handleContactChange}
+                  placeholder="Subject"
+                  className="w-full p-3 border rounded-lg"
+                  required
+                />
+                <textarea
+                  name="message"
+                  value={contactForm.message}
+                  onChange={handleContactChange}
+                  placeholder="Message"
+                  rows="4"
+                  className="w-full p-3 border rounded-lg"
+                  required
+                ></textarea>
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className={`w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 ${
+                    isSubmitting ? "opacity-50 cursor-not-allowed" : ""
+                  }`}
+                >
+                  {isSubmitting ? (
+                    <span>Sending...</span>
+                  ) : (
+                    <>
+                      <Send size={18} /> Send Message
+                    </>
+                  )}
+                </button>
+              </form>
+            </div>
+          </div>
+          <div className="text-center">
+            <h3 className="text-xl font-semibold mb-4">Follow Us</h3>
+            <div className="flex justify-center gap-6">
+              <Facebook
+                className="text-blue-600 cursor-pointer hover:scale-110 transition-transform"
+                size={32}
+              />
+              <Instagram
+                className="text-pink-600 cursor-pointer hover:scale-110 transition-transform"
+                size={32}
+              />
+              <Twitter
+                className="text-blue-400 cursor-pointer hover:scale-110 transition-transform"
+                size={32}
+              />
+              <MessageCircle
+                className="text-green-500 cursor-pointer hover:scale-110 transition-transform"
+                size={32}
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderCategoryPage = () => (
+    <div className="max-w-7xl mx-auto px-4 py-8">
+      <h2 className="text-3xl font-bold mb-8">
+        {selectedCategory?.category_name ||
+          selectedCategory?.name ||
+          "All Products"}
+      </h2>
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-4 gap-6">
+        {products.length === 0 ? (
+          <p className="col-span-4 text-center text-gray-500 py-10">
+            No products found in this category.
+          </p>
+        ) : (
+          products.map((product) => (
+            <div
+              key={product.product_id || product.id}
+              onClick={() => handleProductClick(product)}
+              className="bg-white rounded-none shadow-lg overflow-hidden cursor-pointer hover:shadow-xl transition-shadow"
+            >
+              <img
+                src={getImageUrl(product.image_path || product.image)}
+                alt={product.product_name || product.name}
+                className="w-full h-64 object-cover"
+                onError={(e) => {
+                  e.target.src =
+                    "https://via.placeholder.com/400x400?text=No+Image";
+                }}
+              />
+              <div className="p-4">
+                <h4 className="font-semibold text-lg mb-2">
+                  {product.product_name || product.name}
+                </h4>
+                <p className="text-gray-600 text-sm mb-2 line-clamp-2">
+                  {product.description}
+                </p>
+                <p className="text-blue-600 font-bold text-xl">
+                  Rs. {(product.base_price || product.price).toLocaleString()}
+                </p>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+
+  const renderProductPage = () => {
+    if (!selectedProduct) return null;
+    const price = selectedProduct.base_price || selectedProduct.price;
+    const stock = selectedProduct.stock_quantity || selectedProduct.stock || 0;
+    const categoryName =
+      selectedProduct.category ||
+      selectedCategory?.category_name ||
+      (selectedProduct.category_id
+        ? categories.find((c) => c.category_id === selectedProduct.category_id)
+            ?.category_name
+        : "General");
+
+    return (
+      <div className="max-w-7xl mx-auto px-4 py-8">
+        <button
+          onClick={() => navigateTo("home")}
+          className="mb-6 text-blue-600 hover:underline flex items-center gap-1"
+        >
+          <ArrowLeft size={18} /> Back to Home
+        </button>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
+          {/* IMAGE SECTION */}
+          <div>
+            <img
+              src={getImageUrl(
+                selectedProduct.image_path || selectedProduct.image
+              )}
+              alt={selectedProduct.product_name || selectedProduct.name}
+              className="w-full rounded-none shadow-lg object-cover max-h-[600px]"
+              onError={(e) => {
+                e.target.src =
+                  "https://via.placeholder.com/600x600?text=No+Image";
+              }}
+            />
+          </div>
+
+          {/* DETAILS SECTION */}
+          <div>
+            <h2 className="text-4xl font-bold mb-2 text-gray-900">
+              {selectedProduct.product_name || selectedProduct.name}
+            </h2>
+
+            {/* Metadata: Availability & Category */}
+            <div className="flex gap-4 mb-6 text-sm">
+              <span
+                className={`font-semibold ${
+                  stock > 0 ? "text-green-600" : "text-red-600"
+                } bg-gray-100 px-3 py-1 rounded-full`}
+              >
+                {stock > 0 ? "In Stock" : "Out of Stock"}
+              </span>
+              <span className="text-gray-500 bg-gray-100 px-3 py-1 rounded-full">
+                Product Type: {categoryName}
+              </span>
+            </div>
+
+            <p className="text-gray-600 mb-6 text-lg leading-relaxed">
+              {selectedProduct.description}
+            </p>
+            <p className="text-3xl font-bold text-blue-600 mb-8">
+              Rs. {price.toLocaleString()}
+            </p>
+
+            {/* COLOR SELECTION */}
+            <div className="mb-8">
+              <h3 className="font-semibold mb-3 text-gray-800">
+                Select Color:{" "}
+                <span className="font-normal text-gray-500 ml-2">
+                  {selectedColor
+                    ? selectedColor.color_name || selectedColor.name
+                    : "None"}
+                </span>
+              </h3>
+              <div className="flex gap-3 flex-wrap">
+                {selectedProduct.colors &&
+                  selectedProduct.colors.map((color) => {
+                    const isSelected =
+                      selectedColor &&
+                      (selectedColor.color_id === color.color_id ||
+                        selectedColor.id === color.id);
+                    return (
+                      <button
+                        key={color.color_id || color.id}
+                        onClick={() => setSelectedColor(color)}
+                        className={`w-10 h-10 rounded-full border-2 transition-all flex items-center justify-center ${
+                          isSelected
+                            ? "border-blue-600 ring-2 ring-blue-100 scale-110"
+                            : "border-gray-300 hover:scale-105"
+                        }`}
+                        style={{
+                          backgroundColor:
+                            color.color_code || color.code || "#ccc",
+                        }}
+                        title={color.color_name || color.name}
+                      >
+                        {/* Show checkmark if selected */}
+                        {isSelected && (
+                          <Check
+                            size={16}
+                            className="text-white"
+                            strokeWidth={3}
+                          />
+                        )}
+                      </button>
+                    );
+                  })}
+                {(!selectedProduct.colors ||
+                  selectedProduct.colors.length === 0) && (
+                  <p className="text-gray-500 text-sm">Standard Color</p>
+                )}
+              </div>
+            </div>
+
+            {/* SIZE SELECTION */}
+            <div className="mb-8">
+              <h3 className="font-semibold mb-3 text-gray-800">Select Size:</h3>
+              <div className="flex gap-3">
+                {sizes.map((size) => (
+                  <button
+                    key={size}
+                    onClick={() => setSelectedSize(size)}
+                    disabled={stock === 0}
+                    className={`w-12 h-12 border rounded-lg font-medium transition-all ${
+                      selectedSize === size
+                        ? "bg-gray-800 text-white border-gray-800"
+                        : "bg-white text-gray-600 border-gray-200 hover:border-gray-800"
+                    } ${stock === 0 ? "opacity-50 cursor-not-allowed" : ""}`}
+                  >
+                    {size}
+                  </button>
+                ))}
+              </div>
+              {stock === 0 && (
+                <p className="text-red-500 text-xs mt-2">
+                  Sizes currently unavailable.
+                </p>
+              )}
+            </div>
+
+            {/* QUANTITY */}
+            <div className="mb-8">
+              <h3 className="font-semibold mb-3 text-gray-800">Quantity:</h3>
+              <div className="flex items-center gap-4">
+                <button
+                  onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                  className="bg-gray-100 w-10 h-10 rounded-lg font-bold hover:bg-gray-200 text-gray-600 transition-colors"
+                >
+                  -
+                </button>
+                <span className="text-xl font-semibold w-12 text-center">
+                  {quantity}
+                </span>
+                <button
+                  onClick={() => setQuantity(quantity + 1)}
+                  className="bg-gray-100 w-10 h-10 rounded-lg font-bold hover:bg-gray-200 text-gray-600 transition-colors"
+                >
+                  +
+                </button>
+              </div>
+            </div>
+
+            {/* TOTAL & ACTION */}
+            <div className="flex items-center justify-between bg-gray-50 p-4 rounded-xl mb-6">
+              <span className="text-gray-600 font-medium">Total Price:</span>
+              <span className="font-bold text-2xl text-gray-900">
+                Rs. {getTotalPrice().toLocaleString()}
+              </span>
+            </div>
+
+            <button
+              onClick={handlePlaceOrder}
+              className="w-full text-white bg-green-600 py-4 rounded-lg font-semibold text-lg hover:bg-green-700 flex items-center justify-center gap-2 shadow-lg hover:shadow-xl transition-all"
+              disabled={stock === 0}
+            >
+              <Phone size={20} />{" "}
+              {stock === 0 ? "Out of Stock" : "Place Order via WhatsApp"}
+            </button>
+
+            <p
+              className={`text-sm mt-4 ${
+                stock > 0 ? "text-gray-600" : "text-red-500"
+              }`}
+            >
+              {stock > 0
+                ? `Hurry! Only ${stock} items left in stock.`
+                : "Item currently out of stock."}
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderFooter = () => (
+    <footer className="bg-gray-800 text-white py-8 mt-16">
+      <div className="max-w-7xl mx-auto px-4 text-center">
+        <p>&copy; 2024 FashionHub. All rights reserved.</p>
+        <p className="mt-2 text-gray-400">Designed by Pramod in Sri Lanka</p>
+      </div>
+    </footer>
+  );
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      {renderNavigation()}
+      {currentPage === "home" && renderHomePage()}
+      {currentPage === "categories" && renderCategoryPage()}
+      {currentPage === "category" && renderCategoryPage()}
+      {currentPage === "product" && renderProductPage()}
+      {renderFooter()}
+    </div>
+  );
+};
+
+export default ClothingStore;

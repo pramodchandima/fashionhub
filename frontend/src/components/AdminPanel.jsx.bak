@@ -1,0 +1,820 @@
+import React, { useState, useEffect } from 'react';
+import toast, { Toaster } from 'react-hot-toast';
+import { Plus, Edit, Trash2, LogOut, Package, Tag, X, Image as ImageIcon, UploadCloud, Key } from 'lucide-react';
+import '../styles/admin.css';
+
+const API_BASE = 'http://localhost:5000/api';
+const SERVER_URL = 'http://localhost:5000';
+
+const AdminPanel = () => {
+  const [token, setToken] = useState(localStorage.getItem('adminToken'));
+  const [currentTab, setCurrentTab] = useState('products');
+  const [products, setProducts] = useState([]);
+  const [categories, setCategories] = useState([]);
+
+  // Login
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+
+  // Modal
+  const [showModal, setShowModal] = useState(false);
+  const [modalType, setModalType] = useState('');
+  const [editingItem, setEditingItem] = useState(null);
+
+  // Password Change State
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [passwordForm, setPasswordForm] = useState({ current: '', new: '', confirm: '' });
+
+  // Forms
+  const [productForm, setProductForm] = useState({
+    name: '', description: '', price: '', categoryId: '', stock: '', image: null,
+    colors: [{ name: '', code: '#000000' }]
+  });
+
+  const [categoryForm, setCategoryForm] = useState({
+    name: '', description: '', image: null, hoverImage: null
+  });
+
+  useEffect(() => {
+    if (token) {
+      fetchProducts();
+      fetchCategories();
+    }
+  }, [token]);
+
+  // === AUTH ===
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setError('');
+    const loadingToast = toast.loading('Logging in...');
+
+    try {
+      const res = await fetch(`${API_BASE}/admin/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+      });
+      
+      const data = await res.json();
+      toast.dismiss(loadingToast);
+
+      if (data.success) {
+        localStorage.setItem('adminToken', data.token);
+        setToken(data.token);
+        toast.success("Welcome back, Admin!");
+      } else {
+        setError(data.error || 'Login failed');
+        toast.error(data.error || 'Login failed');
+      }
+    } catch (err) {
+      toast.dismiss(loadingToast);
+      setError('Server connection failed');
+      toast.error('Server connection failed');
+    }
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('adminToken');
+    setToken(null);
+    toast.success('Logged out successfully');
+  };
+
+  const authFetch = async (url, options = {}) => {
+    const headers = { 
+      ...options.headers, 
+      'Authorization': `Bearer ${token}`
+      // REMOVE Content-Type header for FormData
+    };
+    
+    const res = await fetch(url, { ...options, headers });
+    if (res.status === 401) {
+        handleLogout();
+        toast.error("Session expired. Please login again.");
+        throw new Error('Unauthorized');
+    }
+    return res;
+  };
+
+  // === TEST BACKEND ===
+  const testBackend = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/health`);
+      const data = await res.json();
+      console.log('Backend health:', data);
+      toast.success('Backend connected!');
+    } catch (err) {
+      toast.error('Backend connection failed');
+    }
+  };
+
+  // === PASSWORD CHANGE ===
+  const handleChangePassword = async (e) => {
+    e.preventDefault();
+    
+    if (!passwordForm.current || !passwordForm.new || !passwordForm.confirm) {
+      toast.error("All fields are required!");
+      return;
+    }
+    
+    if (passwordForm.new !== passwordForm.confirm) {
+      toast.error("New passwords do not match!");
+      return;
+    }
+    
+    if (passwordForm.new.length < 6) {
+      toast.error("Password must be at least 6 characters");
+      return;
+    }
+
+    const loadingToast = toast.loading('Updating password...');
+
+    try {
+      const res = await authFetch(`${API_BASE}/admin/change-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          currentPassword: passwordForm.current,
+          newPassword: passwordForm.new
+        })
+      });
+
+      const data = await res.json();
+      toast.dismiss(loadingToast);
+
+      if (data.success) {
+        toast.success("Password changed successfully!");
+        setShowPasswordModal(false);
+        setPasswordForm({ current: '', new: '', confirm: '' });
+      } else {
+        toast.error(data.error || "Failed to change password");
+      }
+    } catch (error) {
+      toast.dismiss(loadingToast);
+      toast.error("Server Error");
+    }
+  };
+
+  // === DATA FETCH ===
+  const fetchProducts = async () => {
+    try {
+      const res = await authFetch(`${API_BASE}/admin/products`);
+      if (res.ok) {
+        const data = await res.json();
+        setProducts(Array.isArray(data) ? data : []);
+      }
+    } catch (err) { 
+      setProducts([]); 
+    }
+  };
+
+  const fetchCategories = async () => {
+    try {
+      const res = await authFetch(`${API_BASE}/admin/categories`);
+      if (res.ok) {
+        const data = await res.json();
+        setCategories(Array.isArray(data) ? data : []);
+      }
+    } catch (err) { 
+      setCategories([]); 
+    }
+  };
+
+  const getImageUrl = (path) => {
+    if (!path) return 'https://via.placeholder.com/80';
+    return path.startsWith('http') ? path : `${SERVER_URL}${path}`;
+  };
+
+  // === FIXED: PRODUCT SUBMIT ===
+  const handleProductSubmit = async (e) => {
+    e.preventDefault();
+    
+    // Validation
+    if (!productForm.name || productForm.name.trim() === '') {
+      toast.error("Please enter a product name");
+      return;
+    }
+    if (!productForm.price || parseFloat(productForm.price) <= 0) {
+      toast.error("Please enter a valid price");
+      return;
+    }
+    if (!productForm.categoryId) {
+      toast.error("Please select a category");
+      return;
+    }
+
+    // Create FormData - DO NOT set Content-Type header
+    const formData = new FormData();
+    
+    // Append ALL fields as FormData entries
+    formData.append('name', productForm.name);
+    formData.append('description', productForm.description || '');
+    formData.append('price', productForm.price);
+    formData.append('categoryId', productForm.categoryId);
+    formData.append('stock', productForm.stock || '0');
+    
+    // Colors must be stringified
+    const colorsToSend = productForm.colors.filter(c => c.name.trim() !== '');
+    formData.append('colors', JSON.stringify(colorsToSend));
+    
+    // Image
+    if (productForm.image) {
+      formData.append('image', productForm.image);
+    }
+    
+    // Debug: log FormData
+    console.log('FormData entries:');
+    for (let [key, value] of formData.entries()) {
+      console.log(`${key}:`, value instanceof File ? `File: ${value.name}` : value);
+    }
+
+    const url = editingItem
+      ? `${API_BASE}/admin/products/${editingItem.product_id || editingItem.id}`
+      : `${API_BASE}/admin/products`;
+
+    const loadingToast = toast.loading(editingItem ? 'Updating Product...' : 'Creating Product...');
+
+    try {
+      // DO NOT set Content-Type header - let browser set it for FormData
+      const res = await authFetch(url, {
+        method: editingItem ? 'PUT' : 'POST',
+        body: formData
+      });
+      
+      const data = await res.json();
+      toast.dismiss(loadingToast);
+
+      if (data.success) {
+        toast.success(editingItem ? 'Product updated!' : 'Product created!');
+        fetchProducts();
+        closeModal();
+      } else {
+        toast.error(data.error || 'Operation failed');
+      }
+    } catch (err) { 
+      toast.dismiss(loadingToast);
+      console.error('Product submit error:', err);
+      toast.error('Server error occurred'); 
+    }
+  };
+
+  const handleCategorySubmit = async (e) => {
+    e.preventDefault();
+    const formData = new FormData();
+    formData.append('name', categoryForm.name);
+    formData.append('description', categoryForm.description);
+    if (categoryForm.image) formData.append('image', categoryForm.image);
+    if (categoryForm.hoverImage) formData.append('hoverImage', categoryForm.hoverImage);
+
+    const url = editingItem
+      ? `${API_BASE}/admin/categories/${editingItem.category_id || editingItem.id}`
+      : `${API_BASE}/admin/categories`;
+
+    const loadingToast = toast.loading(editingItem ? 'Updating Category...' : 'Creating Category...');
+
+    try {
+      const res = await authFetch(url, { method: editingItem ? 'PUT' : 'POST', body: formData });
+      const data = await res.json();
+      toast.dismiss(loadingToast);
+
+      if (data.success) {
+        toast.success(editingItem ? 'Category updated!' : 'Category created!');
+        fetchCategories();
+        closeModal();
+      } else {
+        toast.error(data.error || 'Operation failed');
+      }
+    } catch (err) { 
+      toast.dismiss(loadingToast);
+      toast.error('Server error occurred');
+    }
+  };
+
+  // === DELETE ===
+  const handleDelete = (type, id) => {
+    toast((t) => (
+      <div className="flex flex-col gap-3 min-w-[250px]">
+        <div className="font-semibold text-gray-800">
+          Delete this {type}?
+        </div>
+        <div className="flex gap-3 justify-end">
+          <button 
+            className="px-3 py-1.5 bg-gray-100 rounded-lg text-sm font-medium hover:bg-gray-200"
+            onClick={() => toast.dismiss(t.id)}
+          >
+            Cancel
+          </button>
+          <button 
+            className="px-3 py-1.5 bg-red-100 text-white rounded-lg text-sm font-medium hover:bg-red-700"
+            onClick={() => {
+              confirmDelete(type, id);
+              toast.dismiss(t.id);
+            }}
+          >
+            Delete
+          </button>
+        </div>
+      </div>
+    ), { duration: 5000 });
+  };
+
+  const confirmDelete = async (type, id) => {
+    const loadingToast = toast.loading('Deleting...');
+    try {
+      const url = type === 'product'
+        ? `${API_BASE}/admin/products/${id}`
+        : `${API_BASE}/admin/categories/${id}`;
+
+      const res = await authFetch(url, { method: 'DELETE' });
+      const data = await res.json();
+      toast.dismiss(loadingToast);
+
+      if (data.success) {
+        toast.success(`${type} deleted successfully`);
+        if (type === 'product') fetchProducts();
+        else fetchCategories();
+      } else {
+        toast.error(data.error || 'Delete failed');
+      }
+    } catch (err) {
+      toast.dismiss(loadingToast);
+      toast.error('Server error during delete');
+    }
+  };
+
+  // === COLOR HANDLING ===
+  const addColorField = () => {
+    setProductForm({
+      ...productForm,
+      colors: [...productForm.colors, { name: '', code: '#000000' }]
+    });
+  };
+
+  const updateColor = (i, field, value) => {
+    const newColors = [...productForm.colors];
+    newColors[i][field] = value;
+    setProductForm({ ...productForm, colors: newColors });
+  };
+
+  const removeColor = (i) => {
+    setProductForm({
+      ...productForm,
+      colors: productForm.colors.filter((_, idx) => idx !== i)
+    });
+  };
+
+  // === MODAL ===
+  const openModal = (type, item = null) => {
+    setModalType(type);
+    setEditingItem(item);
+
+    if (type === 'product') {
+      if (item) {
+        setProductForm({
+          name: item.product_name || '',
+          description: item.description || '',
+          price: item.base_price || '',
+          categoryId: item.category_id || '',
+          stock: item.stock_quantity || '',
+          image: null,
+          colors: item.colors && item.colors.length > 0
+            ? item.colors.map(c => ({ name: c.color_name || '', code: c.color_code || '#000000' }))
+            : [{ name: '', code: '#000000' }]
+        });
+      } else {
+        setProductForm({
+          name: '', description: '', price: '', categoryId: '', stock: '', image: null,
+          colors: [{ name: '', code: '#000000' }]
+        });
+      }
+    } else {
+      setCategoryForm({
+        name: item?.category_name || '',
+        description: item?.description || '',
+        image: null,
+        hoverImage: null
+      });
+    }
+    setShowModal(true);
+  };
+
+  const closeModal = () => {
+    setShowModal(false);
+    setEditingItem(null);
+  };
+
+  // === RENDER ===
+  if (!token) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-600 to-purple-700">
+        <Toaster position="top-right" />
+        <div className="bg-white p-10 rounded-2xl shadow-2xl w-full max-w-md">
+          <h1 className="text-3xl font-bold text-center mb-8 text-gray-800">Admin Login</h1>
+          {error && <p className="text-red-600 text-center mb-4 font-medium">{error}</p>}
+          <form onSubmit={handleLogin} className="space-y-6">
+            <input 
+              className="input-field" 
+              placeholder="Username" 
+              value={username} 
+              onChange={e => setUsername(e.target.value)} 
+              required 
+            />
+            <input 
+              className="input-field" 
+              type="password" 
+              placeholder="Password" 
+              value={password} 
+              onChange={e => setPassword(e.target.value)} 
+              required 
+            />
+            <button type="submit" className="btn-primary w-full">Login</button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <Toaster position="top-right" />
+      
+      {/* Header */}
+      <header className="bg-white shadow-lg border-b">
+        <div className="max-w-7xl mx-auto px-6 py-5 flex justify-between items-center">
+          <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-purple-600">
+            FashionHub Admin
+          </h1>
+          <div className="flex gap-3">
+              <button onClick={() => setShowPasswordModal(true)} className="flex items-center gap-2 text-gray-600 font-semibold border px-3 py-1 rounded hover:bg-gray-100">
+                  <Key size={18}/> Password
+              </button>
+              <button onClick={handleLogout} className="flex items-center gap-3 text-red-600 hover:bg-red-50 px-5 py-3 rounded-xl font-semibold">
+                  <LogOut size={20} /> Logout
+              </button>
+          </div>
+        </div>
+      </header>
+
+      <div className="max-w-7xl mx-auto p-6">
+        {/* Tabs */}
+        <div className="flex gap-4 mb-8 border-b-2 border-gray-200">
+          <button onClick={() => setCurrentTab('products')} className={`tab-btn ${currentTab === 'products' ? 'tab-active' : ''}`}>
+            <Package size={22} /> Products
+          </button>
+          <button onClick={() => setCurrentTab('categories')} className={`tab-btn ${currentTab === 'categories' ? 'tab-active' : ''}`}>
+            <Tag size={22} /> Categories
+          </button>
+        </div>
+
+        {/* PRODUCTS TAB */}
+        {currentTab === 'products' && (
+          <div>
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-bold">Products ({products.length})</h2>
+              <div className="flex gap-2">
+                <button onClick={testBackend} className="btn-secondary flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
+                  Test Backend
+                </button>
+                <button onClick={() => openModal('product')} className="btn-primary flex items-center gap-2">
+                  <Plus size={20} /> Add Product
+                </button>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
+              <table className="w-full">
+                <thead className="bg-gradient-to-r from-gray-50 to-gray-100">
+                  <tr>
+                    <th className="table-th">Image</th>
+                    <th className="table-th">Name</th>
+                    <th className="table-th">Category</th>
+                    <th className="table-th">Price</th>
+                    <th className="table-th">Stock</th>
+                    <th className="table-th">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {products.map(p => (
+                    <tr key={p.product_id} className="border-b hover:bg-gray-50">
+                      <td className="table-td">
+                        <div className="w-16 h-16 rounded-xl overflow-hidden border-2 border-gray-200">
+                          <img
+                            src={getImageUrl(p.image_path)}
+                            alt={p.product_name}
+                            className="w-full h-full object-cover"
+                            onError={(e) => { e.target.src = 'https://via.placeholder.com/64'; }}
+                          />
+                        </div>
+                      </td>
+                      <td className="table-td font-semibold">{p.product_name}</td>
+                      <td className="table-td text-gray-600">{p.category_name || '-'}</td>
+                      <td className="table-td font-bold text-indigo-600">Rs. {p.base_price?.toLocaleString()}</td>
+                      <td className="table-td">
+                        <span className={`px-3 py-1 rounded-full text-xs font-bold ${p.stock_quantity > 0 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                          {p.stock_quantity}
+                        </span>
+                      </td>
+                      <td className="table-td">
+                        <div className="flex gap-2">
+                          <button onClick={() => openModal('product', p)} className="icon-btn bg-blue-100 text-blue-700 hover:bg-blue-200">
+                            <Edit size={18} />
+                          </button>
+                          <button onClick={() => handleDelete('product', p.product_id)} className="icon-btn bg-red-100 text-red-700 hover:bg-red-200">
+                            <Trash2 size={18} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* CATEGORIES TAB */}
+        {currentTab === 'categories' && (
+          <div>
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-bold">Categories ({categories.length})</h2>
+              <button onClick={() => openModal('category')} className="btn-primary flex items-center gap-2">
+                <Plus size={20} /> Add Category
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {categories.map(c => (
+                <div key={c.category_id} className="category-card group">
+                  <div className="flex items-center gap-6 p-6 bg-white rounded-2xl shadow-lg hover:shadow-2xl border border-gray-100">
+                    <div className="w-20 h-20 rounded-xl overflow-hidden border-2 border-gray-200">
+                      <img
+                        src={getImageUrl(c.image_path)}
+                        alt={c.category_name}
+                        className="w-full h-full object-cover"
+                        onError={(e) => { e.target.src = 'https://via.placeholder.com/80'; }}
+                      />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-bold text-lg text-gray-800 truncate">{c.category_name}</h3>
+                      <p className="text-gray-500 text-sm mt-1 line-clamp-2">
+                        {c.description || 'No description'}
+                      </p>
+                    </div>
+                    <div className="flex flex-col gap-3">
+                      <button onClick={() => openModal('category', c)} className="icon-btn bg-blue-100 text-blue-700 hover:bg-blue-600 hover:text-white">
+                        <Edit size={18} />
+                      </button>
+                      <button onClick={() => handleDelete('category', c.category_id)} className="icon-btn bg-red-100 text-red-700 hover:bg-red-600 hover:text-white">
+                        <Trash2 size={18} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* CHANGE PASSWORD MODAL */}
+      {showPasswordModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-8">
+                <div className="flex justify-between items-center mb-6">
+                    <h2 className="text-2xl font-bold text-gray-800">Change Password</h2>
+                    <button onClick={() => setShowPasswordModal(false)} className="text-gray-500 hover:text-gray-800">
+                        <X size={24} />
+                    </button>
+                </div>
+                <form onSubmit={handleChangePassword} className="space-y-6">
+                    <div>
+                        <label className="label-required">Current Password</label>
+                        <input 
+                          type="password" 
+                          value={passwordForm.current} 
+                          onChange={e => setPasswordForm({...passwordForm, current: e.target.value})} 
+                          className="input-field" 
+                          required 
+                        />
+                    </div>
+                    <div>
+                        <label className="label-required">New Password</label>
+                        <input 
+                          type="password" 
+                          value={passwordForm.new} 
+                          onChange={e => setPasswordForm({...passwordForm, new: e.target.value})} 
+                          className="input-field" 
+                          required 
+                        />
+                    </div>
+                    <div>
+                        <label className="label-required">Confirm New Password</label>
+                        <input 
+                          type="password" 
+                          value={passwordForm.confirm} 
+                          onChange={e => setPasswordForm({...passwordForm, confirm: e.target.value})} 
+                          className="input-field" 
+                          required 
+                        />
+                    </div>
+                    <div className="flex gap-4 pt-2">
+                        <button type="submit" className="flex-1 btn-primary">Update Password</button>
+                        <button type="button" onClick={() => setShowPasswordModal(false)} className="px-6 py-3 bg-gray-200 rounded-xl font-bold hover:bg-gray-300">Cancel</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+      )}
+
+      {/* PRODUCT/CATEGORY MODAL */}
+      {showModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-8">
+              <div className="flex justify-between items-center mb-8">
+                <h2 className="text-3xl font-bold text-gray-800">
+                  {editingItem ? 'Edit' : 'Add'} {modalType === 'product' ? 'Product' : 'Category'}
+                </h2>
+                <button onClick={closeModal} className="text-gray-500 hover:text-gray-800">
+                  <X size={28} />
+                </button>
+              </div>
+
+              {/* PRODUCT FORM */}
+              {modalType === 'product' ? (
+                <form onSubmit={handleProductSubmit} className="space-y-8 p-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div className="space-y-6">
+                      <div>
+                        <label className="label-required">Product Name</label>
+                        <input required value={productForm.name} onChange={e => setProductForm({...productForm, name: e.target.value})} className="input-field" placeholder="Product Name" />
+                      </div>
+                      <div>
+                        <label className="label-required">Price (Rs.)</label>
+                        <input required type="number" step="0.01" value={productForm.price} onChange={e => setProductForm({...productForm, price: e.target.value})} className="input-field" />
+                      </div>
+                      <div>
+                        <label className="label-required">Category</label>
+                        <select required value={productForm.categoryId} onChange={e => setProductForm({...productForm, categoryId: e.target.value})} className="input-field">
+                          <option value="">Select Category</option>
+                          {categories.map(c => <option key={c.category_id} value={c.category_id}>{c.category_name}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="label-required">Stock Quantity</label>
+                        <input required type="number" value={productForm.stock} onChange={e => setProductForm({...productForm, stock: e.target.value})} className="input-field" />
+                      </div>
+                    </div>
+
+                    <div className="space-y-6 p-6">
+                      <div>
+                        <label className="label-required">Product Image</label>
+                        <div className="flex flex-col gap-4">
+                            <div className="flex items-center justify-center w-full">
+                                {productForm.image ? (
+                                    <div className="relative group w-full h-56 rounded-2xl overflow-hidden border-2 border-dashed border-indigo-300">
+                                        <img src={URL.createObjectURL(productForm.image)} alt="Preview" className="w-full h-full object-cover" />
+                                    </div>
+                                ) : editingItem?.image_path ? (
+                                    <div className="relative group w-full h-56 rounded-2xl overflow-hidden border-2 border-dashed border-gray-300">
+                                        <img src={getImageUrl(editingItem.image_path)} alt="Current" className="w-full h-full object-cover" />
+                                    </div>
+                                ) : (
+                                    <div className="w-full h-56 bg-gray-50 border-2 border-dashed border-gray-300 rounded-2xl flex flex-col items-center justify-center text-gray-400">
+                                        <ImageIcon size={48} className="mb-2 opacity-50" />
+                                        <p>No image selected</p>
+                                    </div>
+                                )}
+                            </div>
+                            <label className="file-btn flex items-center justify-center gap-2 p-3 rounded-xl border border-gray-300 hover:border-indigo-500 hover:bg-indigo-50 cursor-pointer">
+                                <UploadCloud size={20} className="text-indigo-600"/>
+                                <span className="font-semibold text-gray-700">Upload Image</span>
+                                <input type="file" accept="image/*" onChange={e => setProductForm({...productForm, image: e.target.files[0]})} className="hidden" />
+                            </label>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label>Description</label>
+                        <textarea rows={4} value={productForm.description} onChange={e => setProductForm({...productForm, description: e.target.value})} className="input-field resize-none" placeholder="Description..." />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Colors */}
+                  <div className="border-t pt-8">
+                    <div className="flex justify-between items-center mb-5">
+                      <h3 className="text-xl font-bold">Colors</h3>
+                      <button type="button" onClick={addColorField} className="text-indigo-600 font-semibold flex items-center gap-1 hover:underline">
+                        <Plus size={20} /> Add Color
+                      </button>
+                    </div>
+                    <div className="space-y-4">
+                      {productForm.colors.map((c, i) => (
+                        <div key={i} className="flex gap-4 items-center bg-gray-50 p-4 rounded-xl border border-gray-200">
+                          <input placeholder="Color Name" value={c.name} onChange={e => updateColor(i, 'name', e.target.value)} className="flex-1 input-field" />
+                          <input type="color" value={c.code} onChange={e => updateColor(i, 'code', e.target.value)} className="w-16 h-12 rounded-lg border-2 cursor-pointer" />
+                          {productForm.colors.length > 1 && (
+                            <button type="button" onClick={() => removeColor(i)} className="text-red-600 hover:bg-red-100 px-4 py-2 rounded-lg font-medium">Remove</button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="flex gap-4 pt-6">
+                    <button type="submit" className="flex-1 btn-primary text-lg py-4 font-bold">
+                      {editingItem ? 'Update Product' : 'Create Product'}
+                    </button>
+                    <button type="button" onClick={closeModal} className="px-8 py-4 bg-gray-200 text-gray-800 rounded-xl font-bold hover:bg-gray-300">
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              ) : (
+                // CATEGORY FORM
+                <form onSubmit={handleCategorySubmit} className="space-y-8 p-6">
+                  <div>
+                    <label className="label-required">Category Name</label>
+                    <input required value={categoryForm.name} onChange={e => setCategoryForm({...categoryForm, name: e.target.value})} className="input-field" />
+                  </div>
+                  <div>
+                    <label>Description</label>
+                    <textarea rows={4} value={categoryForm.description} onChange={e => setCategoryForm({...categoryForm, description: e.target.value})} className="input-field resize-none" />
+                  </div>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label className="label-required">Category Image</label>
+                        <div className="flex flex-col gap-4">
+                            <div className="flex items-center justify-center w-full">
+                                {categoryForm.image ? (
+                                    <div className="relative group w-full h-40 rounded-2xl overflow-hidden border-2 border-dashed border-indigo-300">
+                                        <img src={URL.createObjectURL(categoryForm.image)} alt="Preview" className="w-full h-full object-cover" />
+                                    </div>
+                                ) : editingItem?.image_path ? (
+                                    <div className="relative group w-full h-40 rounded-2xl overflow-hidden border-2 border-dashed border-gray-300">
+                                        <img src={getImageUrl(editingItem.image_path)} alt="Current" className="w-full h-full object-cover" />
+                                    </div>
+                                ) : (
+                                    <div className="w-full h-40 bg-gray-50 border-2 border-dashed border-gray-300 rounded-2xl flex flex-col items-center justify-center text-gray-400">
+                                        <ImageIcon size={48} className="mb-2 opacity-50" />
+                                        <p>No image</p>
+                                    </div>
+                                )}
+                            </div>
+                            <label className="file-btn flex items-center justify-center gap-2 p-3 rounded-xl border border-gray-300 hover:border-indigo-500 hover:bg-indigo-50 cursor-pointer">
+                                <UploadCloud size={20} className="text-indigo-600"/>
+                                <span className="font-semibold text-gray-700">Upload Image</span>
+                                <input required={!editingItem} type="file" accept="image/*" onChange={e => setCategoryForm({...categoryForm, image: e.target.files[0]})} className="hidden" />
+                            </label>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className="mb-2 font-semibold text-gray-700 block">Hover Image (Optional)</label>
+                        <div className="flex flex-col gap-4">
+                            <div className="flex items-center justify-center w-full">
+                                {categoryForm.hoverImage ? (
+                                    <div className="relative group w-full h-40 rounded-2xl overflow-hidden border-2 border-dashed border-indigo-300">
+                                        <img src={URL.createObjectURL(categoryForm.hoverImage)} alt="Preview" className="w-full h-full object-cover" />
+                                    </div>
+                                ) : editingItem?.hover_image_path ? (
+                                    <div className="relative group w-full h-40 rounded-2xl overflow-hidden border-2 border-dashed border-gray-300">
+                                        <img src={getImageUrl(editingItem.hover_image_path)} alt="Current" className="w-full h-full object-cover" />
+                                    </div>
+                                ) : (
+                                    <div className="w-full h-40 bg-gray-50 border-2 border-dashed border-gray-300 rounded-2xl flex flex-col items-center justify-center text-gray-400">
+                                        <ImageIcon size={48} className="mb-2 opacity-50" />
+                                        <p>No hover image</p>
+                                    </div>
+                                )}
+                            </div>
+                            <label className="file-btn flex items-center justify-center gap-2 p-3 rounded-xl border border-gray-300 hover:border-indigo-500 hover:bg-indigo-50 cursor-pointer">
+                                <UploadCloud size={20} className="text-indigo-600"/>
+                                <span className="font-semibold text-gray-700">Upload Hover</span>
+                                <input type="file" accept="image/*" onChange={e => setCategoryForm({...categoryForm, hoverImage: e.target.files[0]})} className="hidden" />
+                            </label>
+                        </div>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-4">
+                    <button type="submit" className="flex-1 btn-primary text-lg py-4 font-bold">
+                      {editingItem ? 'Update Category' : 'Create Category'}
+                    </button>
+                    <button type="button" onClick={closeModal} className="px-8 py-4 bg-gray-200 rounded-xl font-bold hover:bg-gray-300">
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default AdminPanel;

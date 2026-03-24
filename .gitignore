@@ -5,6 +5,7 @@ backend/node_modules/
 .pnp
 .pnp.js
 Images/
+uploads/
 
 # Production / Build
 frontend/build/
